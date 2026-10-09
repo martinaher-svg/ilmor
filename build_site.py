@@ -62,10 +62,15 @@ def die(msg: str) -> None:
 
 
 def load_config() -> Tuple[str, str, List[Location]]:
+    required = ["WEATHER_API_KEY", "SITE_TOKEN", *(f"LOC_{r}" for r, _ in REGIONS)]
+    missing = [k for k in required if not os.getenv(k, "").strip()]
+    if missing:
+        hint = (" (none are set: they must be repository *Secrets*, not Variables, "
+                "under Settings → Secrets and variables → Actions)"
+                if len(missing) == len(required) else "")
+        die(f"not set: {', '.join(missing)}{hint}")
     api_key = os.getenv("WEATHER_API_KEY", "").strip()
     token = os.getenv("SITE_TOKEN", "").strip()
-    if not api_key:
-        die("WEATHER_API_KEY is not set")
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,}", token):
         die("SITE_TOKEN must be at least 16 URL-safe characters")
 
