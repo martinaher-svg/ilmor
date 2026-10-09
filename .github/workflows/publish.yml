@@ -1,0 +1,50 @@
+name: Publish dashboard
+
+on:
+  schedule:
+    # Every 15 min, offset from :00 because GitHub's scheduler is most congested at the top of the hour
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Build site
+        env:
+          WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
+          LOC_BE: ${{ secrets.LOC_BE }}
+          LOC_IT: ${{ secrets.LOC_IT }}
+          LOC_EE: ${{ secrets.LOC_EE }}
+          SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
+        run: python build_site.py --out _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          retention-days: 1
+
+      - uses: actions/deploy-pages@v4
