@@ -3,3 +3,10 @@
 _site/
 __pycache__/
 *.pyc
+
+# Never commit credentials (SSH keys, certificates)
+*key
+*key.pub
+id_*
+*.pem
+*.p12
