@@ -45,6 +45,16 @@ COLORS: Dict[str, str] = {
     "gold1": "#ffd700",
 }
 AQI = {1: ("Good", "#7ee787"), 2: ("Fair", "#67e8f9"), 3: ("Moderate", "#f9e27d"), 4: ("Poor", "#ff6b6b"), 5: ("Hazardous", "#ff3b3b")}
+AQI_ET = {1: ("Hea", "#7ee787"), 2: ("Rahuldav", "#67e8f9"), 3: ("Mõõdukas", "#f9e27d"), 4: ("Halb", "#ff6b6b"), 5: ("Ohtlik", "#ff3b3b")}
+
+LIGHTING_ET = {
+    "Gloomy / Low Diffuse Lux": "Sombune / Hajus hämarus",
+    "Filtered Sun / Soft Glare": "Filtreeritud päike / Pehme kuma",
+    "Direct Bright Sun": "Otsene ere päike",
+    "Darkness": "Pimedus",
+}
+
+from vibe_ee import get_ee_vibe, translate_weather_desc
 
 
 @dataclass
@@ -162,9 +172,19 @@ document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();
 """
 
 
-def page(title: str, body: str, generated: int) -> str:
+def page(title: str, body: str, generated: int, lang: str = "en") -> str:
+    if lang == "et":
+        footer_html = f'<footer>Uuendatud <time data-ts="{generated}" datetime="{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated))}">{time.strftime("%H:%M UTC", time.gmtime(generated))}</time> · värskendub iga 15 min järel</footer>'
+        js_code = """(()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
+const f=()=>{const m=Math.max(0,Math.round((Date.now()/1e3-ts)/60));
+t.textContent=m<1?'just praegu':m<60?m+' min tagasi':Math.floor(m/60)+' t '+(m%60)+' min tagasi';
+document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();"""
+    else:
+        footer_html = f'<footer>Updated <time data-ts="{generated}" datetime="{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated))}">{time.strftime("%H:%M UTC", time.gmtime(generated))}</time> · refreshes every 15 min</footer>'
+        js_code = JS
+
     return f"""<!doctype html>
-<html lang="en"><head>
+<html lang="{lang}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
@@ -176,8 +196,8 @@ def page(title: str, body: str, generated: int) -> str:
 <style>{CSS}</style>
 </head><body><main>
 {body}
-<footer>Updated <time data-ts="{generated}" datetime="{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(generated))}">{time.strftime('%H:%M UTC', time.gmtime(generated))}</time> · refreshes every 15 min</footer>
-</main><script>{JS}</script></body></html>
+{footer_html}
+</main><script>{js_code}</script></body></html>
 """
 
 
@@ -187,73 +207,130 @@ def nav(active: Optional[str], prefix: str) -> str:
 
 
 def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str], generated: int) -> str:
+    is_ee = (loc.region == "EE")
+    lang = "et" if is_ee else "en"
     head = nav(loc.region, "../")
     if w is None:
-        body = f'{head}<section class="card"><h2>{loc.flag} {loc.region}</h2><p class="err">Data unavailable this cycle ({E(err or "unknown error")}). Next attempt in ≤15 min.</p></section>'
-        return page(f"{loc.region} · unavailable", body, generated)
+        err_msg = (f'Andmed pole sellel tsüklil saadaval ({E(err or "tundmatu viga")}). Järgmine katse ≤15 min pärast.'
+                   if is_ee else f'Data unavailable this cycle ({E(err or "unknown error")}). Next attempt in ≤15 min.')
+        body = f'{head}<section class="card"><h2>{loc.flag} {loc.region}</h2><p class="err">{err_msg}</p></section>'
+        return page(f"{loc.region} · {'pole saadaval' if is_ee else 'unavailable'}", body, generated, lang=lang)
 
     v = evaluate_vibe(w)
+    if is_ee:
+        v_name, v_quote = get_ee_vibe(v.name)
+    else:
+        v_name, v_quote = v.name, v.quote
+
     color = COLORS.get(v.color, "#f0f6fc")
     uv = f"~{w.uv_index:.1f}" if w.uv_estimated else f"{w.uv_index:.1f}"
     precip = f"{w.rain_amount:.1f} mm" + (f" · ❄ {w.snow_amount:.1f} mm" if w.snow_amount > 0 else "")
 
+    desc_disp = translate_weather_desc(w.desc) if is_ee else w.desc.title()
+    feels_label = "tuntav" if is_ee else "feels"
+    wind_label = "Tuul" if is_ee else "Wind"
+    hum_label = "Õhuniiskus" if is_ee else "Humidity"
+    uv_label = "UV" if is_ee else "UV"
+    rain_now_label = "Sadu praegu" if is_ee else "Rain now"
+    rain_chance_label = "Saju tõenäosus" if is_ee else "Rain chance"
+    press_label = "Õhurõhk" if is_ee else "Pressure"
+
     parts = [head]
-    parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v.name)}</h1><p>{E(v.quote)}</p></section>')
+    parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v_name)}</h1><p>{E(v_quote)}</p></section>')
     parts.append(f'''<section class="card now">
-<div class="big"><b>{w.temp:+.1f}°C</b><span>feels {w.feels_like:+.1f}°C · {E(w.desc.title())}</span></div>
-<div class="tile"><small>Wind</small>{w.wind_speed:.1f} m/s<br><span style="color:var(--dim)">{w.wind_deg}°</span></div>
-<div class="tile"><small>Humidity</small>{w.humidity}%</div>
-<div class="tile"><small>UV</small>{uv}</div>
-<div class="tile"><small>Rain now</small>{precip}</div>
-<div class="tile"><small>Rain chance</small>{w.rain_prob:.0f}%</div>
-<div class="tile"><small>Pressure</small>{w.pressure} hPa</div>
+<div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}</span></div>
+<div class="tile"><small>{wind_label}</small>{w.wind_speed:.1f} m/s<br><span style="color:var(--dim)">{w.wind_deg}°</span></div>
+<div class="tile"><small>{hum_label}</small>{w.humidity}%</div>
+<div class="tile"><small>{uv_label}</small>{uv}</div>
+<div class="tile"><small>{rain_now_label}</small>{precip}</div>
+<div class="tile"><small>{rain_chance_label}</small>{w.rain_prob:.0f}%</div>
+<div class="tile"><small>{press_label}</small>{w.pressure} hPa</div>
 </section>''')
 
     rows = []
-    for label, hr in (("Morning", 11), ("Afternoon", 14), ("Evening", 17)):
+    tw_targets = (("Hommik", 11), ("Pärastlõuna", 14), ("Õhtu", 17)) if is_ee else (("Morning", 11), ("Afternoon", 14), ("Evening", 17))
+    for label, hr in tw_targets:
         s = nearest_step(w.forecast_steps, hr)
         if s:
             flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5) else "[-]"
+            s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
             rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
                         f'<span class="{"wet" if s.rain_mm > 0 else ""}">{int(s.pop*100)}% · {s.rain_mm:.1f}mm</span>'
-                        f'<span>{flag}</span><span class="d">{label} · {E(s.desc)}</span></div>')
+                        f'<span>{flag}</span><span class="d">{label} · {E(s_desc)}</span></div>')
     if rows:
-        parts.append(f'<section class="card"><h2>Target windows</h2>{"".join(rows)}</section>')
+        tw_title = "Võtmeajad" if is_ee else "Target windows"
+        parts.append(f'<section class="card"><h2>{tw_title}</h2>{"".join(rows)}</section>')
 
     frows = []
     for s in w.forecast_steps:
         pct = int(s.pop * 100)
+        s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
         frows.append(f'<div class="row"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
                      f'<div class="bar"><i style="width:{pct}%"></i><span>{pct}% · {s.rain_mm:.1f}mm</span></div>'
                      f'<span class="{"windy" if s.wind_speed > 10 else ""}">{s.wind_speed:.1f}m/s</span>'
-                     f'<span class="d">{E(s.desc)}</span></div>')
-    parts.append(f'<section class="card"><h2>24-hour forecast</h2>{"".join(frows)}</section>')
+                     f'<span class="d">{E(s_desc)}</span></div>')
+    fc_title = "24 h prognoos" if is_ee else "24-hour forecast"
+    parts.append(f'<section class="card"><h2>{fc_title}</h2>{"".join(frows)}</section>')
 
     eph = w.ephemeris
     air = ""
     if w.aqi_data:
-        label, ac = AQI.get(w.aqi_data.aqi, ("Unknown", "#f0f6fc"))
-        air = (f'<span>Air</span><span><b style="color:{ac}">{w.aqi_data.aqi} {label}</b> · '
-               f'PM2.5 {w.aqi_data.pm2_5:.1f} · PM10 {w.aqi_data.pm10:.1f} µg/m³</span>')
-    parts.append(f'''<section class="card"><h2>Ephemeris</h2><div class="kv">
-<span>Daylight</span><span>{E(eph.daylight_left_str)}</span>
-<span>Clouds</span><span>{eph.cloud_pct}% · {E(eph.lighting_condition)}</span>
+        if is_ee:
+            label, ac = AQI_ET.get(w.aqi_data.aqi, ("Tundmatu", "#f0f6fc"))
+            air = (f'<span>Õhk</span><span><b style="color:{ac}">{w.aqi_data.aqi} {label}</b> · '
+                   f'PM2.5 {w.aqi_data.pm2_5:.1f} · PM10 {w.aqi_data.pm10:.1f} µg/m³</span>')
+        else:
+            label, ac = AQI.get(w.aqi_data.aqi, ("Unknown", "#f0f6fc"))
+            air = (f'<span>Air</span><span><b style="color:{ac}">{w.aqi_data.aqi} {label}</b> · '
+                   f'PM2.5 {w.aqi_data.pm2_5:.1f} · PM10 {w.aqi_data.pm10:.1f} µg/m³</span>')
+
+    if is_ee:
+        eph_title = "Päev & Valgus"
+        daylight_label = "Valget aega"
+        dl_str = eph.daylight_left_str
+        if dl_str == "Night Cycle":
+            dl_disp = "Öö"
+        elif "h " in dl_str and "m" in dl_str:
+            dl_disp = dl_str.replace("h ", " t ").replace("m", " min jäänud")
+        else:
+            dl_disp = dl_str
+        clouds_label = "Pilvisus"
+        lighting_disp = LIGHTING_ET.get(eph.lighting_condition, eph.lighting_condition)
+    else:
+        eph_title = "Ephemeris"
+        daylight_label = "Daylight"
+        dl_disp = eph.daylight_left_str
+        clouds_label = "Clouds"
+        lighting_disp = eph.lighting_condition
+
+    parts.append(f'''<section class="card"><h2>{eph_title}</h2><div class="kv">
+<span>{daylight_label}</span><span>{E(dl_disp)}</span>
+<span>{clouds_label}</span><span>{eph.cloud_pct}% · {E(lighting_disp)}</span>
 {air}</div></section>''')
-    return page(f"{loc.region} · {v.name}", "\n".join(parts), generated)
+    return page(f"{loc.region} · {v_name}", "\n".join(parts), generated, lang=lang)
 
 
 def render_overview(results, generated: int) -> str:
     cards = [nav(None, "./")]
     for loc, w, err in results:
+        is_ee = (loc.region == "EE")
         if w is None:
+            err_text = "Pole sellel tsüklil saadaval" if is_ee else "Unavailable this cycle"
             cards.append(f'<section class="card ov"><a href="./{loc.region.lower()}/"><div class="top"><span class="reg">{loc.flag} {loc.region}</span></div>'
-                         f'<p class="err">Unavailable this cycle</p></a></section>')
+                         f'<p class="err">{err_text}</p></a></section>')
             continue
         v = evaluate_vibe(w)
+        if is_ee:
+            v_name, _ = get_ee_vibe(v.name)
+            desc_text = f'{E(translate_weather_desc(w.desc))} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% vihma'
+        else:
+            v_name = v.name
+            desc_text = f'{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain'
+
         cards.append(f'''<section class="card ov"><a href="./{loc.region.lower()}/">
 <div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°</span></div>
-<h1 style="color:{COLORS.get(v.color, "#f0f6fc")}">{E(v.name)}</h1>
-<span style="color:var(--dim)">{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain</span></a></section>''')
+<h1 style="color:{COLORS.get(v.color, "#f0f6fc")}">{E(v_name)}</h1>
+<span style="color:var(--dim)">{desc_text}</span></a></section>''')
     return page("Atmospheric Dispatch", "\n".join(cards), generated)
 
 
