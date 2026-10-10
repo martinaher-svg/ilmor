@@ -172,7 +172,7 @@ document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();
 """
 
 
-def page(title: str, body: str, generated: int, lang: str = "en") -> str:
+def page(title: str, body: str, generated: int, lang: str = "en", app_title: str = "Atmospheric") -> str:
     if lang == "et":
         footer_html = f'<footer>Uuendatud <time data-ts="{generated}" datetime="{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated))}">{time.strftime("%H:%M UTC", time.gmtime(generated))}</time> · värskendub iga 15 min järel</footer>'
         js_code = """(()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
@@ -191,8 +191,14 @@ document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();"""
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="refresh" content="300">
 <meta name="theme-color" content="#0d1117">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self';">
 <title>{E(title)}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="{E(app_title)}">
 <style>{CSS}</style>
 </head><body><main>
 {body}
@@ -307,7 +313,9 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
 <span>{daylight_label}</span><span>{E(dl_disp)}</span>
 <span>{clouds_label}</span><span>{eph.cloud_pct}% · {E(lighting_disp)}</span>
 {air}</div></section>''')
-    return page(f"{loc.region} · {v_name}", "\n".join(parts), generated, lang=lang)
+    app_titles = {"EE": "Ilm EE", "BE": "Weather BE", "IT": "Meteo IT"}
+    app_title = app_titles.get(loc.region, f"Weather {loc.region}")
+    return page(f"{loc.region} · {v_name}", "\n".join(parts), generated, lang=lang, app_title=app_title)
 
 
 def render_overview(results, generated: int) -> str:
@@ -331,7 +339,7 @@ def render_overview(results, generated: int) -> str:
 <div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°</span></div>
 <h1 style="color:{COLORS.get(v.color, "#f0f6fc")}">{E(v_name)}</h1>
 <span style="color:var(--dim)">{desc_text}</span></a></section>''')
-    return page("Atmospheric Dispatch", "\n".join(cards), generated)
+    return page("Atmospheric Dispatch", "\n".join(cards), generated, app_title="Atmospheric")
 
 
 # ---------------------------------------------------------------------
@@ -393,6 +401,27 @@ async def build(out: Path) -> int:
         path = out / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+    # Copy region-specific and overview icons
+    icons_src = Path(__file__).resolve().parent / "icons"
+    if icons_src.exists():
+        import shutil
+        for loc, _, _ in results:
+            reg = loc.region.lower()
+            src_reg = icons_src / reg
+            if src_reg.exists():
+                dst_reg = out / token / reg
+                dst_reg.mkdir(parents=True, exist_ok=True)
+                for f in src_reg.glob("*.png"):
+                    shutil.copy2(f, dst_reg / f.name)
+        # Overview icons
+        src_ov = icons_src / "ov"
+        if src_ov.exists():
+            dst_ov = out / token
+            for f in src_ov.glob("*.png"):
+                shutil.copy2(f, dst_ov / f.name)
+                shutil.copy2(f, out / f.name)
+
     print(f"Wrote {len(files)} files ({ok}/3 locations live).")
     return 0
 

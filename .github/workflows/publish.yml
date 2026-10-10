@@ -6,6 +6,9 @@ on:
     # Offset from :00 because GitHub's scheduler is most congested at the top of the hour.
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch: {}
+  push:
+    branches:
+      - main
 
 permissions: {}
 
