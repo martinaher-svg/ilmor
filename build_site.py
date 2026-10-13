@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from engine import WeatherPayload, evaluate_vibe, fetch_weather, nearest_step
+from engine import WeatherPayload, deg_to_cardinal, evaluate_vibe, fetch_weather, nearest_step
 
 REGIONS: List[Tuple[str, str]] = [("BE", "🇧🇪"), ("IT", "🇮🇹"), ("EE", "🇪🇪")]
 RETRY_DELAYS = (0, 5, 15)  # seconds before each attempt
@@ -144,7 +144,7 @@ nav a.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
 .tile{background:#0f141c;border:1px solid var(--line);border-radius:8px;padding:8px}
 .tile small{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 h2{font-size:12px;letter-spacing:.1em;color:var(--dim);margin:0 0 8px;text-transform:uppercase}
-.row{display:grid;grid-template-columns:3.4em 4.2em 1fr 4.6em;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:3.4em 4.2em 1fr 6.8em;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .row.tw{grid-template-columns:3.4em 4.2em 1fr 2.6em}
 .row .d{grid-column:1/-1;color:var(--dim);font-size:12px;margin-top:-4px}
@@ -152,7 +152,7 @@ h2{font-size:12px;letter-spacing:.1em;color:var(--dim);margin:0 0 8px;text-trans
 .bar i{position:absolute;inset:0 auto 0 0;background:#2f5fb8}
 .bar span{position:relative;padding:0 6px;line-height:18px;white-space:nowrap}
 .wet{color:#79a6ff}.warn{color:#ff6b6b;font-weight:700}.windy{color:#ff6b6b}
-.kv{display:grid;grid-template-columns:6em 1fr;gap:4px 8px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 8px}
 .kv span:nth-child(odd){color:var(--dim)}
 footer{color:var(--dim);font-size:12px;text-align:center;padding:8px 0 20px}
 .stale footer time{color:#ff6b6b;font-weight:700}
@@ -165,23 +165,42 @@ footer{color:var(--dim);font-size:12px;text-align:center;padding:8px 0 20px}
 """
 
 JS = """
-(()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
-const f=()=>{const m=Math.max(0,Math.round((Date.now()/1e3-ts)/60));
+(()=>{const f=window.updateTime=()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
+const m=Math.max(0,Math.round((Date.now()/1e3-ts)/60));
 t.textContent=m<1?'just now':m<60?m+' min ago':Math.floor(m/60)+' h '+(m%60)+' min ago';
 document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();
 """
+
+POLL_JS = """setInterval(async () => {
+  try {
+    const res = await fetch(window.location.href, { cache: 'no-store' });
+    if (res.ok) {
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const newMain = doc.querySelector('main');
+      if (newMain) {
+        document.querySelector('main').replaceWith(newMain);
+        if (window.updateTime) window.updateTime();
+      }
+    }
+  } catch (e) {
+    // Offline: keep existing rendered data intact without crashing
+  }
+}, 300000);"""
 
 
 def page(title: str, body: str, generated: int, lang: str = "en", app_title: str = "Atmospheric") -> str:
     if lang == "et":
         footer_html = f'<footer>Uuendatud <time data-ts="{generated}" datetime="{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated))}">{time.strftime("%H:%M UTC", time.gmtime(generated))}</time> · värskendub iga 15 min järel</footer>'
-        js_code = """(()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
-const f=()=>{const m=Math.max(0,Math.round((Date.now()/1e3-ts)/60));
+        time_js = """(()=>{const f=window.updateTime=()=>{const t=document.querySelector('time[data-ts]');if(!t)return;const ts=+t.dataset.ts;
+const m=Math.max(0,Math.round((Date.now()/1e3-ts)/60));
 t.textContent=m<1?'just praegu':m<60?m+' min tagasi':Math.floor(m/60)+' t '+(m%60)+' min tagasi';
 document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();"""
     else:
         footer_html = f'<footer>Updated <time data-ts="{generated}" datetime="{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(generated))}">{time.strftime("%H:%M UTC", time.gmtime(generated))}</time> · refreshes every 15 min</footer>'
-        js_code = JS
+        time_js = JS
+
+    js_code = f"{time_js}\n{POLL_JS}"
 
     return f"""<!doctype html>
 <html lang="{lang}"><head>
@@ -189,9 +208,8 @@ document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();"""
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="refresh" content="300">
 <meta name="theme-color" content="#0d1117">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self';">
 <title>{E(title)}</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon.png">
@@ -245,7 +263,7 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v_name)}</h1><p>{E(v_quote)}</p></section>')
     parts.append(f'''<section class="card now">
 <div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}</span></div>
-<div class="tile"><small>{wind_label}</small>{w.wind_speed:.1f} m/s<br><span style="color:var(--dim)">{w.wind_deg}°</span></div>
+<div class="tile"><small>{wind_label}</small>{w.wind_speed:.1f} m/s<br><span style="color:var(--dim)">{deg_to_cardinal(w.wind_deg)} · {w.wind_deg}°</span></div>
 <div class="tile"><small>{hum_label}</small>{w.humidity}%</div>
 <div class="tile"><small>{uv_label}</small>{uv}</div>
 <div class="tile"><small>{rain_now_label}</small>{precip}</div>
@@ -253,16 +271,24 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
 <div class="tile"><small>{press_label}</small>{w.pressure} hPa</div>
 </section>''')
 
-    rows = []
+    tw_matches = []
     tw_targets = (("Hommik", 11), ("Pärastlõuna", 14), ("Õhtu", 17)) if is_ee else (("Morning", 11), ("Afternoon", 14), ("Evening", 17))
     for label, hr in tw_targets:
         s = nearest_step(w.forecast_steps, hr)
         if s:
-            flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5) else "[-]"
-            s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
-            rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
-                        f'<span class="{"wet" if s.rain_mm > 0 else ""}">{int(s.pop*100)}% · {s.rain_mm:.1f}mm</span>'
-                        f'<span>{flag}</span><span class="d">{label} · {E(s_desc)}</span></div>')
+            tw_matches.append((s, label))
+
+    tw_matches.sort(key=lambda pair: (pair[0].day_offset, pair[0].time_str))
+
+    rows = []
+    for s, label in tw_matches:
+        day_prefix = ("Homme · " if is_ee else "Tomorrow · ") if s.day_offset > 0 else ""
+        tw_label = f"{day_prefix}{label}"
+        flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5) else "[-]"
+        s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
+        rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
+                    f'<span class="{"wet" if s.rain_mm > 0 else ""}">{int(s.pop*100)}% · {s.rain_mm:.1f}mm</span>'
+                    f'<span>{flag}</span><span class="d">{tw_label} · {E(s_desc)}</span></div>')
     if rows:
         tw_title = "Võtmeajad" if is_ee else "Target windows"
         parts.append(f'<section class="card"><h2>{tw_title}</h2>{"".join(rows)}</section>')
@@ -273,7 +299,7 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
         s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
         frows.append(f'<div class="row"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
                      f'<div class="bar"><i style="width:{pct}%"></i><span>{pct}% · {s.rain_mm:.1f}mm</span></div>'
-                     f'<span class="{"windy" if s.wind_speed > 10 else ""}">{s.wind_speed:.1f}m/s</span>'
+                     f'<span class="{"windy" if s.wind_speed > 10 else ""}" style="text-align:right">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
                      f'<span class="d">{E(s_desc)}</span></div>')
     fc_title = "24 h prognoos" if is_ee else "24-hour forecast"
     parts.append(f'<section class="card"><h2>{fc_title}</h2>{"".join(frows)}</section>')
@@ -386,8 +412,8 @@ async def build(out: Path) -> int:
 
     files: Dict[str, str] = {
         f"{token}/index.html": render_overview(results, generated),
-        "index.html": page("Nothing here", "<p style='color:#8b949e'>Nothing to see here.</p>", generated).replace('<meta http-equiv="refresh" content="300">', ""),
-        "404.html": page("Not found", "<p style='color:#8b949e'>Not found.</p>", generated).replace('<meta http-equiv="refresh" content="300">', ""),
+        "index.html": page("Nothing here", "<p style='color:#8b949e'>Nothing to see here.</p>", generated),
+        "404.html": page("Not found", "<p style='color:#8b949e'>Not found.</p>", generated),
         "robots.txt": "User-agent: *\nDisallow: /\n",
         ".nojekyll": "",
     }

@@ -48,6 +48,7 @@ class ForecastStep:
     wind_speed: float  # m/s
     wind_deg: int
     desc: str
+    day_offset: int = 0  # 0 for today (relative to local time), 1 for tomorrow
 
     @property
     def rain_rate(self) -> float:
@@ -120,6 +121,12 @@ HEAVY_RAIN_DESCS = ("moderate rain", "heavy intensity rain", "very heavy rain", 
 def _heavy_desc(w: WeatherPayload) -> bool:
     return any(k in w.desc_lower for k in HEAVY_RAIN_DESCS)
 
+CARDINALS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
+
+def deg_to_cardinal(deg: int) -> str:
+    idx = int((deg + 11.25) / 22.5) % 16
+    return CARDINALS[idx]
+
 def wind_from(w: WeatherPayload, lo: int, hi: int) -> bool:
     d = w.wind_deg % 360
     return lo <= d <= hi if lo <= hi else (d >= lo or d <= hi)
@@ -176,6 +183,8 @@ VIBE_RULES: List[VibeRule] = [
              priority=830, condition=lambda w: w.temp < 5.0 and w.humidity > 90 and not w.is_wet),
     VibeRule("SWAMP NIGHT", "sea_green2", '"Turn the fans on high and pray for morning."',
              priority=810, condition=lambda w: w.is_night and w.temp > 20.0 and w.humidity > 80),
+    VibeRule("SÄÄSED", "dark_olive_green3", '"The true apex predator of the Estonian forest has hatched. Long sleeves, DEET, and accept your fate."',
+             priority=806, regions=EE, condition=lambda w: 16.0 <= w.temp <= 28.0 and w.humidity > 70 and w.wind_speed < 2.5 and not w.is_wet and 17 <= w.local_hour <= 22),
     VibeRule("VALGED ÖÖD", "light_goldenrod1", '"White nights. It\'s past 21:00 and the sun refuses to clock out. Neither do the mosquitoes."',
              priority=805, regions=EE, condition=lambda w: w.is_night and w.ephemeris.is_day and not w.is_wet and w.temp > 8.0),
     VibeRule("THE RARE EVENING", "dark_violet", '"Actually pleasant after dark. A statistical anomaly."',
@@ -184,12 +193,12 @@ VIBE_RULES: List[VibeRule] = [
              priority=790, condition=lambda w: w.is_night and not w.is_wet and w.temp > 15.0),
     VibeRule("NIGHT CRAWLER", "dim white", '"Go out if you must, but consider the cost."',
              priority=780, condition=lambda w: w.is_night and not w.is_wet and 10.0 <= w.temp <= 15.0),
-    VibeRule("SUITSUSAUN", "dark_orange", '"Smoke sauna weather. Fire up the suitsusaun, then roll in the snow (or the pond) like a true local."',
-             priority=775, regions=EE, condition=lambda w: w.temp < 5.0 and 16 <= w.local_hour <= 23 and w.wind_speed < 10.0),
+    VibeRule("PIMEDUS", "grey50", '"Pimedus: the darkness. It\'s mid-afternoon and pitch black. Vitamin D is now a personality trait."',
+             priority=775, regions=EE, condition=lambda w: not w.ephemeris.is_day and 14 <= w.local_hour <= 19),
     VibeRule("COCOA TIME", "sandy_brown", '"Warm cup of chocolate and back to bed."',
              priority=770, condition=lambda w: w.is_night and not w.is_wet and 3.0 < w.temp < 10.0),
-    VibeRule("PIMEDUS", "grey50", '"Pimedus: the darkness. It\'s mid-afternoon and pitch black. Vitamin D is now a personality trait."',
-             priority=765, regions=EE, condition=lambda w: not w.ephemeris.is_day and 14 <= w.local_hour <= 19),
+    VibeRule("SUITSUSAUN", "dark_orange", '"Smoke sauna weather. Fire up the suitsusaun, then roll in the snow (or the pond) like a true local."',
+             priority=765, regions=EE, condition=lambda w: w.temp < 5.0 and 16 <= w.local_hour <= 23 and w.wind_speed < 10.0 and not w.is_wet),
     VibeRule("SCIROCCO", "orange3", '"Hot, sticky, Saharan dust on the car and everyone is irritable. It\'s not you, it\'s the Scirocco."',
              priority=760, regions=IT, condition=lambda w: wind_from(w, 100, 170) and w.wind_speed >= 3.0 and w.temp >= 18.0 and w.humidity >= 50 and not w.is_wet),
     VibeRule("TRAMONTANA", "bright_cyan", '"Crystal clear and freezing, straight down off the mountains. Even the statues are shivering."',
@@ -208,8 +217,6 @@ VIBE_RULES: List[VibeRule] = [
              priority=710, condition=lambda w: w.is_morning and not w.is_wet and 3.0 < w.temp < 18.0),
 
     # 6. HIGH-SPECIFICITY EDGE CASES
-    VibeRule("SÄÄSED", "dark_olive_green3", '"The true apex predator of the Estonian forest has hatched. Long sleeves, DEET, and accept your fate."',
-             priority=695, regions=EE, condition=lambda w: 16.0 <= w.temp <= 28.0 and w.humidity > 70 and w.wind_speed < 2.5 and not w.is_wet and 17 <= w.local_hour <= 22),
     VibeRule("THE UNICORN", "bright_magenta", '"Exactly 20 degrees and calm. Take a picture, it will be gone in 5 minutes."',
              priority=690, condition=lambda w: 19.8 <= w.temp <= 20.2 and not w.is_wet and w.wind_speed < 2.0),
     VibeRule("THE TERRARIUM", "bright_green", '"Welcome to the enclosure. You are the iguana now."',
@@ -330,6 +337,8 @@ def solar_elevation_deg(lat: float, lon: float, ts: float) -> float:
     return 90.0 - math.degrees(math.acos(max(-1.0, min(1.0, cos_zen))))
 
 def estimate_uv(lat: float, lon: float, ts: float, cloud_pct: int) -> float:
+    lat = round(lat, 1)
+    lon = round(lon, 1)
     elev = solar_elevation_deg(lat, lon, ts)
     if elev <= 0.0:
         return 0.0
@@ -350,6 +359,8 @@ async def _optional_json(client: httpx.AsyncClient, url: str, params: Dict[str, 
 
 async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon: float, country: str) -> WeatherPayload:
     """Same data pipeline as weatherlive20's TelemetryController, without any naming of the location."""
+    lat = round(lat, 1)
+    lon = round(lon, 1)
     params = {"lat": lat, "lon": lon, "appid": api_key, "units": "metric"}
     om_params = {"latitude": lat, "longitude": lon, "current": "uv_index",
                  "hourly": "precipitation_probability", "forecast_hours": 1, "timezone": "GMT"}
@@ -394,7 +405,8 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
     cloud_pct = d_curr.get("clouds", {}).get("all", 0)
     is_day = sr <= now_ts <= ss
     tz_offset = d_curr.get("timezone", 0)
-    local_hour = datetime.fromtimestamp(now_ts + tz_offset, tz=timezone.utc).hour
+    now_local_dt = datetime.fromtimestamp(now_ts + tz_offset, tz=timezone.utc)
+    local_hour = now_local_dt.hour
 
     uv_estimated = uv_val is None
     if uv_val is None:
@@ -411,18 +423,28 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
 
     steps: List[ForecastStep] = []
     for entry in d_fore.get("list", [])[:8]:
-        dt = datetime.fromtimestamp(entry.get("dt", 0) + tz_offset, tz=timezone.utc)
-        rain_val = 0.0
-        if isinstance(entry.get("rain"), dict):
-            rain_val = float(entry["rain"]["3h"]) if "3h" in entry["rain"] else float(entry["rain"].get("1h", 0.0)) * FORECAST_STEP_HOURS
+        step_dt = datetime.fromtimestamp(entry.get("dt", 0) + tz_offset, tz=timezone.utc)
+        day_offset = (step_dt.date() - now_local_dt.date()).days
+
+        def _step_precip(block_key: str) -> float:
+            block = entry.get(block_key)
+            if isinstance(block, dict):
+                if "3h" in block:
+                    return float(block["3h"])
+                if "1h" in block:
+                    return float(block["1h"]) * FORECAST_STEP_HOURS
+            return 0.0
+
+        rain_val = _step_precip("rain") + _step_precip("snow")
         steps.append(ForecastStep(
-            time_str=dt.strftime("%H:%M"),
+            time_str=step_dt.strftime("%H:%M"),
             temp=float(entry.get("main", {}).get("temp", 0.0)),
             pop=float(entry.get("pop", 0.0)),
             rain_mm=rain_val,
             wind_speed=float(entry.get("wind", {}).get("speed", 0.0)),
             wind_deg=int(entry.get("wind", {}).get("deg", 0)),
             desc=entry.get("weather", [{}])[0].get("description", "").title(),
+            day_offset=day_offset,
         ))
 
     def _current_mm(key: str) -> float:

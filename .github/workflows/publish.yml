@@ -80,6 +80,7 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
+      # Minimum retention allowed by GitHub Actions (1 day) to limit exposure
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
