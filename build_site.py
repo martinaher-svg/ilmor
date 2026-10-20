@@ -54,6 +54,7 @@ LIGHTING_ET = {
     "Darkness": "Pimedus",
 }
 
+from vibe_be import get_be_vibe
 from vibe_ee import get_ee_vibe, translate_weather_desc
 
 
@@ -243,6 +244,8 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     v = evaluate_vibe(w)
     if is_ee:
         v_name, v_quote = get_ee_vibe(v.name)
+    elif loc.region == "BE":
+        v_name, v_quote = get_be_vibe(v.name)
     else:
         v_name, v_quote = v.name, v.quote
 
@@ -357,6 +360,9 @@ def render_overview(results, generated: int) -> str:
         if is_ee:
             v_name, _ = get_ee_vibe(v.name)
             desc_text = f'{E(translate_weather_desc(w.desc))} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% vihma'
+        elif loc.region == "BE":
+            v_name, _ = get_be_vibe(v.name)
+            desc_text = f'{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain'
         else:
             v_name = v.name
             desc_text = f'{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain'
