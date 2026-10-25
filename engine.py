@@ -49,6 +49,7 @@ class ForecastStep:
     wind_deg: int
     desc: str
     day_offset: int = 0  # 0 for today (relative to local time), 1 for tomorrow
+    wind_gust: float = 0.0  # m/s peak gust in the 3h step
 
     @property
     def rain_rate(self) -> float:
@@ -82,6 +83,12 @@ class WeatherPayload:
     snow_amount: float = 0.0      # mm current 1h snow
     uv_estimated: bool = False    # True when UV comes from the solar-geometry fallback
     country: str = ""             # ISO 3166 alpha-2 (e.g. "BE", "IT", "EE")
+    wind_gust: float = 0.0        # m/s current wind gust
+
+    @property
+    def effective_wind_gust(self) -> float:
+        """Peak gust (at least wind_speed)."""
+        return max(self.wind_speed, self.wind_gust)
 
     @property
     def desc_lower(self) -> str:
@@ -116,10 +123,49 @@ class VibeRule:
     def applies_to(self, region: str) -> bool:
         return self.regions is None or region in self.regions
 
-HEAVY_RAIN_DESCS = ("moderate rain", "heavy intensity rain", "very heavy rain", "extreme rain", "heavy intensity shower rain")
+SEVERE_RAIN_DESCS = ("heavy intensity rain", "very heavy rain", "extreme rain", "heavy intensity shower rain")
 
 def _heavy_desc(w: WeatherPayload) -> bool:
-    return any(k in w.desc_lower for k in HEAVY_RAIN_DESCS)
+    d = w.desc_lower
+    if any(k in d for k in SEVERE_RAIN_DESCS):
+        return True
+    return "moderate rain" in d and w.rain_amount >= 1.0
+
+def _is_gale(w: WeatherPayload) -> bool:
+    """Severe storm / gale-force sustained wind or damaging gusts."""
+    gust = w.effective_wind_gust
+    return (
+        w.wind_speed >= 15.0
+        or gust >= 21.0
+        or (w.wind_speed >= 12.0 and gust >= 17.5)
+    )
+
+def _is_storm_wind(w: WeatherPayload) -> bool:
+    """Strong storm wind (11.5+ m/s sustained, 16+ m/s gusts, or 9.5+ m/s with 13.5+ m/s gusts)."""
+    gust = w.effective_wind_gust
+    return (
+        w.wind_speed >= 11.5
+        or gust >= 16.0
+        or (w.wind_speed >= 9.5 and gust >= 13.5)
+    )
+
+def _is_high_wind(w: WeatherPayload) -> bool:
+    """Blustery 10 m/s class wind or strong gusts (>= 13 m/s)."""
+    gust = w.effective_wind_gust
+    return (
+        w.wind_speed >= 9.0
+        or gust >= 13.0
+        or (w.wind_speed >= 7.5 and gust >= 11.5)
+    )
+
+def _is_wet_windy(w: WeatherPayload) -> bool:
+    """Rain/drizzle driven by strong wind or gusts (sideways rain)."""
+    gust = w.effective_wind_gust
+    return w.is_wet and (
+        w.wind_speed >= 8.0
+        or gust >= 12.0
+        or (w.wind_speed >= 6.0 and gust >= 10.5)
+    )
 
 CARDINALS = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
 
@@ -136,23 +182,27 @@ def wind_from(w: WeatherPayload, lo: int, hi: int) -> bool:
 # =====================================================================
 
 VIBE_RULES: List[VibeRule] = [
-    # 1. EXTREMES & POP CULTURE
+    # 1. EXTREMES, STORMS & POP CULTURE
     VibeRule("GHOSTBUSTERS", "bright_yellow", '"There is no Dana, only Zuul!" Unplug electronics.',
              priority=1000, condition=lambda w: "thunder" in w.desc_lower),
     VibeRule("THE EYEWALL", "bright_red", '"Hold onto your hats, your neighbors\' sheds, and your dignity."',
-             priority=990, condition=lambda w: w.wind_speed > 20.0),
+             priority=990, condition=_is_gale),
     VibeRule("HOTH", "bright_white", '"Your Tauntaun will freeze. Stay inside and expand the factory."',
              priority=980, condition=lambda w: "snow" in w.desc_lower or "sleet" in w.desc_lower or w.snow_amount > 0.0),
     VibeRule("THE STEAM ROOM", "khaki", '"Opaque AND sweaty. The worst kind of sauna."',
              priority=970, condition=lambda w: ("fog" in w.desc_lower or "mist" in w.desc_lower) and w.temp > 20.0),
+    VibeRule("LIBECCIO", "bright_blue", '"The Libeccio is hurling the Tyrrhenian at the coast. Stay off the pier and tie down the ombrellone."',
+             priority=968, regions=IT, condition=lambda w: wind_from(w, 200, 250) and (w.wind_speed > 9.0 or (w.wind_speed >= 7.0 and w.effective_wind_gust >= 13.0))),
+    VibeRule("THE HORIZONTAL SHOWER", "bright_blue", '"Umbrellas are useless here. Embrace the suck."',
+             priority=965, condition=lambda w: w.temp < 24.0 and _is_wet_windy(w)),
     VibeRule("SILENT HILL", "light_slate_grey", '"Watch out for Pyramid Head."',
-             priority=960, condition=lambda w: "fog" in w.desc_lower or "mist" in w.desc_lower),
+             priority=960, condition=lambda w: ("fog" in w.desc_lower or "mist" in w.desc_lower) and not _is_high_wind(w)),
 
-    # 2. SEVERE PRECIPITATION
+    # 2. SEVERE PRECIPITATION (calm-to-moderate wind; windstorms caught above)
     VibeRule("TROPICAL DEPRESSION", "bright_blue", '"Warm and aggressively wet. Basically a jungle minus the exotic birds."',
              priority=955, condition=lambda w: w.temp >= 20.0 and (w.rain_amount > 4.0 or (w.is_wet and any(s.rain_rate > 4.0 for s in w.forecast_steps[:1])))),
     VibeRule("NOAH'S ARK", "bright_cyan", '"Might want to build that ark."',
-             priority=950, condition=lambda w: w.rain_amount > 4.0 or (w.rain_prob > 85 and w.rain_amount > 2.0) or any(s.rain_rate > 4.0 or (s.pop > 0.8 and s.rain_rate > 2.0) for s in w.forecast_steps[:3])),
+             priority=950, condition=lambda w: w.rain_amount > 4.0 or (w.rain_prob > 85 and w.rain_amount > 2.5) or (w.rain_amount >= 1.5 and any(s.rain_rate > 4.0 for s in w.forecast_steps[:2]))),
     VibeRule("THE LUKEWARM WASH", "bright_cyan", '"Like standing in a mildly neglected public shower."',
              priority=930, condition=lambda w: 16.0 <= w.temp <= 20.0 and (w.rain_amount > 2.0 or ("rain" in w.desc_lower and w.rain_amount > 1.0))),
     VibeRule("PROPER RAIN", "bright_blue", '"Get the umbrella. The heavy-duty one."',
@@ -170,15 +220,19 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("THE DEADLY LASER", "bright_yellow", '"The sun is a deadly laser. Don\'t look directly at it."',
              priority=860, condition=lambda w: w.uv_index > 7.0 and w.temp > 25.0),
 
-    # 4. EXTREME COLD & NIGHT CONDITIONS
+    # 4. STRONG WINDS, EXTREME COLD & NIGHT CONDITIONS
     VibeRule("THE WHITE WALKER", "bright_cyan", '"Winter is here. Don\'t go outside unless you have Valyrian steel."',
-             priority=855, condition=lambda w: w.is_night and w.temp < 0.0 and w.wind_speed > 5.0),
+             priority=855, condition=lambda w: w.is_night and w.temp < 0.0 and (w.wind_speed > 5.0 or w.effective_wind_gust > 8.0)),
+    VibeRule("THE WIND TUNNEL", "bright_cyan", '"It\'s not just cold; the air is actively trying to peel the skin off your face."',
+             priority=852, condition=lambda w: w.temp < 10.0 and _is_high_wind(w)),
     VibeRule("BALTIC FREEZE", "bright_cyan", '"Nose hairs freezing on contact. Thermal base layers mandatory."',
              priority=850, condition=lambda w: w.temp <= -3.0),
-    VibeRule("LIBECCIO", "bright_blue", '"The Libeccio is hurling the Tyrrhenian at the coast. Stay off the pier and tie down the ombrellone."',
-             priority=845, regions=IT, condition=lambda w: wind_from(w, 200, 250) and w.wind_speed > 9.0),
-    VibeRule("THE WIND TUNNEL", "bright_cyan", '"It\'s not just cold; the air is actively trying to peel the skin off your face."',
-             priority=840, condition=lambda w: w.temp < 10.0 and w.wind_speed > 10.0),
+    VibeRule("THE INVISIBLE HAND", "bright_cyan", '"Mother Nature is trying to physically shove you back indoors."',
+             priority=848, condition=lambda w: 8.0 <= w.temp <= 25.0 and not w.is_wet and _is_storm_wind(w)),
+    VibeRule("TRAMONTANA", "bright_cyan", '"Crystal clear and freezing, straight down off the mountains. Even the statues are shivering."',
+             priority=840, regions=IT, condition=lambda w: wind_from(w, 330, 30) and w.wind_speed >= 5.0 and w.temp < 14.0 and not w.is_wet),
+    VibeRule("BAD HAIR DAY", "bright_yellow", '"Your hairgel has no power here."',
+             priority=835, condition=lambda w: 8.0 <= w.temp <= 25.0 and not w.is_wet and _is_high_wind(w)),
     VibeRule("BONE CHILL", "bright_white", '"Excellent weather to stay indoors and stare at your Steam library."',
              priority=830, condition=lambda w: w.temp < 5.0 and w.humidity > 90 and not w.is_wet),
     VibeRule("SWAMP NIGHT", "sea_green2", '"Turn the fans on high and pray for morning."',
@@ -201,8 +255,6 @@ VIBE_RULES: List[VibeRule] = [
              priority=765, regions=EE, condition=lambda w: w.temp < 5.0 and 16 <= w.local_hour <= 23 and w.wind_speed < 10.0 and not w.is_wet),
     VibeRule("SCIROCCO", "orange3", '"Hot, sticky, Saharan dust on the car and everyone is irritable. It\'s not you, it\'s the Scirocco."',
              priority=760, regions=IT, condition=lambda w: wind_from(w, 100, 170) and w.wind_speed >= 3.0 and w.temp >= 18.0 and w.humidity >= 50 and not w.is_wet),
-    VibeRule("TRAMONTANA", "bright_cyan", '"Crystal clear and freezing, straight down off the mountains. Even the statues are shivering."',
-             priority=757, regions=IT, condition=lambda w: wind_from(w, 330, 30) and w.wind_speed >= 5.0 and w.temp < 14.0 and not w.is_wet),
 
     # 5. MORNING CONDITIONS
     VibeRule("EARLY OVEN", "bright_yellow", '"It\'s 8 AM and you are already sweating. Cancel all afternoon plans."',
@@ -228,7 +280,7 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("SNEAKY SUNBURN", "bright_red", '"The wind masks the heat. You will return looking like a boiled lobster."',
              priority=650, condition=lambda w: 17.0 <= w.temp <= 24.0 and w.uv_index > 5.0 and w.wind_speed > 5.0 and not w.is_wet),
     VibeRule("THE DECEPTIVE BREEZE", "bright_cyan", '"Looks perfect from the window. Outside, your patio furniture is plotting an escape."',
-             priority=640, condition=lambda w: 17.0 <= w.temp <= 23.0 and not w.is_wet and w.wind_speed > 7.0),
+             priority=640, condition=lambda w: 12.0 <= w.temp <= 23.0 and not w.is_wet and (w.wind_speed > 7.0 or w.effective_wind_gust >= 11.0)),
     VibeRule("SCHRÖDINGER'S SHOWER", "bright_magenta", '"It might rain. It might not. Carry a jacket just to spite the atmosphere."',
              priority=630, condition=lambda w: 12.0 <= w.temp <= 22.0 and 35.0 <= w.rain_prob <= 65.0 and not w.is_wet),
     VibeRule("THE CRISP BAKE", "bright_yellow", '"Air is cool, sun is a laser beam. The ultimate thermostat confusion."',
@@ -237,18 +289,12 @@ VIBE_RULES: List[VibeRule] = [
     # 7. THE COOL-TO-MILD PURGATORY (~10°C - 21°C)
     VibeRule("THE THREAT", "light_slate_grey", '"The sky is aggressively gray and looming, but doing absolutely nothing."',
              priority=600, condition=lambda w: 12.0 <= w.temp <= 19.0 and w.rain_prob > 60.0 and not w.is_wet),
-    VibeRule("THE INVISIBLE HAND", "bright_cyan", '"Mother Nature is trying to physically shove you back indoors."',
-             priority=590, condition=lambda w: 13.0 <= w.temp <= 21.0 and w.wind_speed > 14.0 and not w.is_wet),
-    VibeRule("BAD HAIR DAY", "bright_yellow", '"Your hairgel has no power here."',
-             priority=580, condition=lambda w: 13.0 <= w.temp <= 20.0 and w.wind_speed > 10.0 and not w.is_wet),
     VibeRule("FOOL'S SUMMER", "bright_red", '"Looks like July, feels like October. Don\'t pack the coats away yet."',
              priority=570, condition=lambda w: 14.0 <= w.temp <= 18.0 and w.uv_index > 4.5 and w.wind_speed < 3.0 and not w.is_wet),
-    VibeRule("THE HORIZONTAL SHOWER", "bright_blue", '"Umbrellas are useless here. Embrace the suck."',
-             priority=560, condition=lambda w: w.temp < 18.0 and w.wind_speed > 8.0 and w.is_wet),
     VibeRule("GARDEN WARRIOR", "bright_green", '"Crisp, clear, and calm. Prime weather to test out a heavy-duty shredder on some branches."',
              priority=550, condition=lambda w: 13.0 <= w.temp <= 16.0 and "clear" in w.desc_lower and w.wind_speed < 2.0),
     VibeRule("THE WIND CHILL", "bright_cyan", '"The sun is trying its best, but the wind hates you."',
-             priority=540, condition=lambda w: 10.0 <= w.temp <= 16.0 and w.uv_index > 3.5 and w.wind_speed > 6.0 and not w.is_wet),
+             priority=540, condition=lambda w: 10.0 <= w.temp <= 16.0 and w.uv_index > 3.5 and (w.wind_speed > 6.0 or w.effective_wind_gust >= 10.0) and not w.is_wet),
     VibeRule("PERPETUAL GLOOM", "dim white", '"It\'s barely raining, but your soul is still getting wet."',
              priority=530, condition=lambda w: 10.0 <= w.temp <= 15.0 and w.rain_prob > 75.0 and w.rain_amount < 0.5),
     VibeRule("THE VOID", "bright_white", '"Absolutely nothing is happening out there. Perfect stasis."',
@@ -282,7 +328,7 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("THE PATIO GAMBLE", "khaki1", '"Lovely right now, but the forecast has trust issues. Eat outside, but sit near the door."',
              priority=385, condition=lambda w: 18.0 <= w.temp <= 25.0 and w.wind_speed < 5.0 and not w.is_wet),
     VibeRule("THE BRISK BREEZE", "bright_yellow", '"Nice temperature, but the wind is trying to steal your napkins."',
-             priority=380, condition=lambda w: 17.0 <= w.temp <= 25.0 and w.wind_speed >= 5.0 and not w.is_wet),
+             priority=380, condition=lambda w: 14.0 <= w.temp <= 25.0 and (w.wind_speed >= 5.0 or w.effective_wind_gust >= 8.5) and not w.is_wet),
     VibeRule("THE ROASTING SPIT", "bright_yellow", '"Hot enough to complain, not hot enough to melt. Stay in the shade."',
              priority=370, condition=lambda w: 25.0 < w.temp <= 31.0 and not w.is_wet),
     VibeRule("LAYERING SEASON", "dim white", '"A jacket is too much. No jacket is too little. Good luck."',
@@ -362,8 +408,9 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
     lat = round(lat, 1)
     lon = round(lon, 1)
     params = {"lat": lat, "lon": lon, "appid": api_key, "units": "metric"}
-    om_params = {"latitude": lat, "longitude": lon, "current": "uv_index",
-                 "hourly": "precipitation_probability", "forecast_hours": 1, "timezone": "GMT"}
+    om_params = {"latitude": lat, "longitude": lon, "current": "uv_index,wind_gusts_10m",
+                 "hourly": "precipitation_probability", "wind_speed_unit": "ms",
+                 "forecast_hours": 1, "timezone": "GMT"}
 
     res_curr, res_fore, d_aqi, d_om = await asyncio.gather(
         client.get(f"{OWM_BASE}/weather", params=params),
@@ -388,11 +435,16 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
 
     uv_val: Optional[float] = None
     om_pop: Optional[float] = None
+    om_gust: float = 0.0
     if isinstance(d_om, dict):
         try:
-            uv_raw = d_om.get("current", {}).get("uv_index")
+            curr_om = d_om.get("current", {})
+            uv_raw = curr_om.get("uv_index")
             if uv_raw is not None:
                 uv_val = round(float(uv_raw), 1)
+            gust_raw = curr_om.get("wind_gusts_10m")
+            if gust_raw is not None:
+                om_gust = float(gust_raw)
             pops = d_om.get("hourly", {}).get("precipitation_probability") or []
             if pops and pops[0] is not None:
                 om_pop = float(pops[0])
@@ -436,15 +488,18 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
             return 0.0
 
         rain_val = _step_precip("rain") + _step_precip("snow")
+        step_wind = float(entry.get("wind", {}).get("speed", 0.0))
+        step_gust = max(step_wind, float(entry.get("wind", {}).get("gust") or 0.0))
         steps.append(ForecastStep(
             time_str=step_dt.strftime("%H:%M"),
             temp=float(entry.get("main", {}).get("temp", 0.0)),
             pop=float(entry.get("pop", 0.0)),
             rain_mm=rain_val,
-            wind_speed=float(entry.get("wind", {}).get("speed", 0.0)),
+            wind_speed=step_wind,
             wind_deg=int(entry.get("wind", {}).get("deg", 0)),
             desc=entry.get("weather", [{}])[0].get("description", "").title(),
             day_offset=day_offset,
+            wind_gust=step_gust,
         ))
 
     def _current_mm(key: str) -> float:
@@ -457,6 +512,9 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
         return 0.0
 
     immediate_pop = om_pop if om_pop is not None else ((steps[0].pop * 100.0) if steps else 0.0)
+    curr_wind = float(d_curr.get("wind", {}).get("speed", 0.0))
+    owm_gust = float(d_curr.get("wind", {}).get("gust") or 0.0)
+    curr_gust = max(curr_wind, owm_gust, om_gust)
 
     return WeatherPayload(
         location_name=country,
@@ -464,7 +522,7 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
         feels_like=float(d_curr.get("main", {}).get("feels_like", 0.0)),
         humidity=int(d_curr.get("main", {}).get("humidity", 0)),
         pressure=int(d_curr.get("main", {}).get("pressure", 1013)),
-        wind_speed=float(d_curr.get("wind", {}).get("speed", 0.0)),
+        wind_speed=curr_wind,
         wind_deg=int(d_curr.get("wind", {}).get("deg", 0)),
         desc=d_curr.get("weather", [{}])[0].get("description", "Unknown"),
         forecast_steps=steps,
@@ -477,6 +535,7 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
         snow_amount=_current_mm("snow"),
         uv_estimated=uv_estimated,
         country=country,
+        wind_gust=curr_gust,
     )
 
 def nearest_step(steps: List[ForecastStep], target_hr: int, tolerance_hr: int = 1) -> Optional[ForecastStep]:

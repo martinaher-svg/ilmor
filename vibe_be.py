@@ -26,7 +26,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "d",
     },
     2: {
-        "trigger": "Wind speed > 20.0 m/s",
+        "trigger": "Wind speed >= 15.0 m/s, or gusts >= 21.0 m/s, or (wind >= 12.0 m/s and gusts >= 17.5 m/s)",
         "orig_name": "THE EYEWALL",
         "orig_quote": '"Hold onto your hats, your neighbors\' sheds, and your dignity."',
         "a": ("FLYING TRAMPOLINE ALERT", '"Hold onto your hat, your recycling bins, and your neighbor\'s airborne garden shed."'),
@@ -65,7 +65,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     5: {
-        "trigger": "Fog or mist in description (and temp <= 20.0°C)",
+        "trigger": "Fog or mist in description (temp <= 20.0°C, and not in high wind)",
         "orig_name": "SILENT HILL",
         "orig_quote": '"Watch out for Pyramid Head."',
         "a": ("RENDER DISTANCE: MINIMAL", '"The world stops 15 meters ahead. Watch out for creepy sirens and Pyramid Head."'),
@@ -91,7 +91,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     7: {
-        "trigger": "Rain > 4.0 mm/h, or (> 85% prob and > 2.0 mm/h), or next 9h forecast has > 4.0 mm/h (or > 80% pop with > 2.0 mm/h)",
+        "trigger": "Rain > 4.0 mm/h, or (> 85% prob and > 2.5 mm/h), or raining >= 1.5 mm/h with > 4.0 mm/h in next 6h (when not windy enough for Horizontal Shower)",
         "orig_name": "NOAH'S ARK",
         "orig_quote": '"Might want to build that ark."',
         "a": ("CUBITS OF GOPHER WOOD", '"Start gathering the animals two by two. The driveway is already navigable."'),
@@ -117,7 +117,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     9: {
-        "trigger": "Rain 1.5–4.0 mm/h, or moderate/heavy rain in weather description",
+        "trigger": "Rain 1.5–4.0 mm/h, or heavy rain in description (or moderate rain with >= 1.0 mm/h), when not windy enough for Horizontal Shower",
         "orig_name": "PROPER RAIN",
         "orig_quote": '"Get the umbrella. The heavy-duty one."',
         "a": ("SERIOUS PRECIPITATION", '"Leave the compact folding umbrella at home. Bring the golf-sized fibreglass fortress."'),
@@ -195,7 +195,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     15: {
-        "trigger": "Night (21:00–05:59), temp < 0.0°C, and wind speed > 5.0 m/s",
+        "trigger": "Night (21:00–05:59), temp < 0.0°C, and wind speed > 5.0 m/s (or gusts > 8.0 m/s)",
         "orig_name": "WINTER IS HERE",
         "orig_quote": '"Don\'t go outside unless you have Valyrian steel."',
         "a": ("BEYOND THE WALL", '"Sub-zero night wind howling in the dark. Only the Night\'s Watch is out there."'),
@@ -221,7 +221,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     17: {
-        "trigger": "Temp < 10.0°C and wind speed > 10.0 m/s",
+        "trigger": "Temp < 10.0°C and high wind (wind >= 9.0 m/s, gusts >= 13.0 m/s, or wind >= 7.5 m/s with gusts >= 11.5 m/s)",
         "orig_name": "THE WIND TUNNEL",
         "orig_quote": '"It\'s not just cold; the air is actively trying to peel the skin off your face."',
         "a": ("SANDPAPER GALE", '"Cold wind over 10 m/s. Nature is performing an aggressive exfoliation on your cheeks."'),
@@ -442,7 +442,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     34: {
-        "trigger": "Temp 17.0–23.0°C, wind speed > 7.0 m/s, and dry",
+        "trigger": "Temp 12.0–23.0°C, wind speed > 7.0 m/s (or gusts >= 11.0 m/s), and dry",
         "orig_name": "THE DECEPTIVE BREEZE",
         "orig_quote": '"Looks perfect from the window. Outside, your patio furniture is plotting an escape."',
         "a": ("WINDOW ILLUSION", '"Through triple glazing it looks like paradise. Step outside and your parasol takes flight."'),
@@ -494,7 +494,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "g",
     },
     38: {
-        "trigger": "Temp 13.0–21.0°C, wind speed > 14.0 m/s, and dry",
+        "trigger": "Temp 8.0–25.0°C, strong storm wind (wind >= 11.5 m/s, gusts >= 16.0 m/s, or wind >= 9.5 m/s with gusts >= 13.5 m/s), and dry",
         "orig_name": "THE INVISIBLE HAND",
         "orig_quote": '"Mother Nature is trying to physically shove you back indoors."',
         "a": ("BOUNCER WIND", '"14+ m/s gusts. You step out the front door and the atmosphere body-checks you back into the hallway."'),
@@ -507,7 +507,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     39: {
-        "trigger": "Temp 13.0–20.0°C, wind speed > 10.0 m/s, and dry",
+        "trigger": "Temp 8.0–25.0°C, high wind (wind >= 9.0 m/s, gusts >= 13.0 m/s, or wind >= 7.5 m/s with gusts >= 11.5 m/s), and dry",
         "orig_name": "BAD HAIR DAY",
         "orig_quote": '"Your hairgel has no power here."',
         "a": ("FOLLICLE CHAOS", '"10+ m/s wind. Whatever you did in front of the bathroom mirror this morning has been erased."'),
@@ -533,7 +533,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     41: {
-        "trigger": "Temp < 18.0°C, wind speed > 8.0 m/s, and wet (raining/drizzle)",
+        "trigger": "Temp < 24.0°C, wet (raining/drizzle), and windy (wind >= 8.0 m/s, gusts >= 12.0 m/s, or wind >= 6.0 m/s with gusts >= 10.5 m/s)",
         "orig_name": "THE HORIZONTAL SHOWER",
         "orig_quote": '"Umbrellas are useless here. Embrace the suck."',
         "a": ("SIDEWAYS RAIN", '"The rain is traveling parallel to the ground. Umbrellas will invert within four seconds."'),
@@ -559,7 +559,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     43: {
-        "trigger": "Temp 10.0–16.0°C, UV index > 3.5, wind speed > 6.0 m/s, and dry",
+        "trigger": "Temp 10.0–16.0°C, UV index > 3.5, wind speed > 6.0 m/s (or gusts >= 10.0 m/s), and dry",
         "orig_name": "THE WIND CHILL",
         "orig_quote": '"The sun is trying its best, but the wind hates you."',
         "a": ("SABOTAGED SUNSHINE", '"Bright sky doing its best work, immediately ruined by a 6+ m/s cold breeze."'),
@@ -715,7 +715,7 @@ VIBES_BE: Dict[int, Dict[str, Any]] = {
         "pick": "orig",
     },
     55: {
-        "trigger": "Temp 17.0–25.0°C, wind speed >= 5.0 m/s, and dry",
+        "trigger": "Temp 14.0–25.0°C, wind speed >= 5.0 m/s (or gusts >= 8.5 m/s), and dry",
         "orig_name": "THE BRISK BREEZE",
         "orig_quote": '"Nice temperature, but the wind is trying to steal your napkins."',
         "a": ("WEIGHT DOWN THE MENU", '"Warm and dry, with a lively breeze. Put your phone on the napkins and hold onto your receipt."'),

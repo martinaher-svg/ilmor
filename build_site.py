@@ -262,11 +262,20 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     rain_chance_label = "Saju tõenäosus" if is_ee else "Rain chance"
     press_label = "Õhurõhk" if is_ee else "Pressure"
 
+    gust_val = w.effective_wind_gust
+    if gust_val >= w.wind_speed + 1.5:
+        gust_lbl = f"iilid {gust_val:.0f} m/s" if is_ee else f"gusts {gust_val:.0f} m/s"
+        gust_cls = ' class="windy"' if gust_val >= 13.0 else ""
+        wind_sub = f'{deg_to_cardinal(w.wind_deg)} · <span{gust_cls}>{gust_lbl}</span>'
+    else:
+        wind_sub = f'{deg_to_cardinal(w.wind_deg)} · {w.wind_deg}°'
+    wind_val_cls = ' class="windy"' if (w.wind_speed >= 10.0 or gust_val >= 13.0) else ""
+
     parts = [head]
     parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v_name)}</h1><p>{E(v_quote)}</p></section>')
     parts.append(f'''<section class="card now">
 <div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}</span></div>
-<div class="tile"><small>{wind_label}</small>{w.wind_speed:.1f} m/s<br><span style="color:var(--dim)">{deg_to_cardinal(w.wind_deg)} · {w.wind_deg}°</span></div>
+<div class="tile"><small>{wind_label}</small><span{wind_val_cls}>{w.wind_speed:.1f} m/s</span><br><span style="color:var(--dim)">{wind_sub}</span></div>
 <div class="tile"><small>{hum_label}</small>{w.humidity}%</div>
 <div class="tile"><small>{uv_label}</small>{uv}</div>
 <div class="tile"><small>{rain_now_label}</small>{precip}</div>
@@ -287,7 +296,8 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     for s, label in tw_matches:
         day_prefix = ("Homme · " if is_ee else "Tomorrow · ") if s.day_offset > 0 else ""
         tw_label = f"{day_prefix}{label}"
-        flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5) else "[-]"
+        is_stormy_step = s.wind_speed >= 10.0 or s.wind_gust >= 13.0
+        flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5 or is_stormy_step) else "[-]"
         s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
         rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
                     f'<span class="{"wet" if s.rain_mm > 0 else ""}">{int(s.pop*100)}% · {s.rain_mm:.1f}mm</span>'
@@ -300,9 +310,10 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     for s in w.forecast_steps:
         pct = int(s.pop * 100)
         s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
+        is_windy_row = s.wind_speed >= 10.0 or s.wind_gust >= 13.0
         frows.append(f'<div class="row"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
                      f'<div class="bar"><i style="width:{pct}%"></i><span>{pct}% · {s.rain_mm:.1f}mm</span></div>'
-                     f'<span class="{"windy" if s.wind_speed > 10 else ""}" style="text-align:right">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
+                     f'<span class="{"windy" if is_windy_row else ""}" style="text-align:right">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
                      f'<span class="d">{E(s_desc)}</span></div>')
     fc_title = "24 h prognoos" if is_ee else "24-hour forecast"
     parts.append(f'<section class="card"><h2>{fc_title}</h2>{"".join(frows)}</section>')
@@ -357,15 +368,20 @@ def render_overview(results, generated: int) -> str:
                          f'<p class="err">{err_text}</p></a></section>')
             continue
         v = evaluate_vibe(w)
+        gust_val = w.effective_wind_gust
+        has_gust = gust_val >= w.wind_speed + 2.0 and gust_val >= 11.0
         if is_ee:
             v_name, _ = get_ee_vibe(v.name)
-            desc_text = f'{E(translate_weather_desc(w.desc))} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% vihma'
+            wind_str = f"{w.wind_speed:.0f} (iilid {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
+            desc_text = f'{E(translate_weather_desc(w.desc))} · {wind_str} · {w.rain_prob:.0f}% vihma'
         elif loc.region == "BE":
             v_name, _ = get_be_vibe(v.name)
-            desc_text = f'{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain'
+            wind_str = f"{w.wind_speed:.0f} (gusts {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
+            desc_text = f'{E(w.desc.title())} · {wind_str} · {w.rain_prob:.0f}% rain'
         else:
             v_name = v.name
-            desc_text = f'{E(w.desc.title())} · {w.wind_speed:.0f} m/s · {w.rain_prob:.0f}% rain'
+            wind_str = f"{w.wind_speed:.0f} (gusts {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
+            desc_text = f'{E(w.desc.title())} · {wind_str} · {w.rain_prob:.0f}% rain'
 
         cards.append(f'''<section class="card ov"><a href="./{loc.region.lower()}/">
 <div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°</span></div>
