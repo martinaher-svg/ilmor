@@ -172,22 +172,39 @@ t.textContent=m<1?'just now':m<60?m+' min ago':Math.floor(m/60)+' h '+(m%60)+' m
 document.body.classList.toggle('stale',m>45)};f();setInterval(f,30000)})();
 """
 
-POLL_JS = """setInterval(async () => {
-  try {
-    const res = await fetch(window.location.href, { cache: 'no-store' });
-    if (res.ok) {
-      const html = await res.text();
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const newMain = doc.querySelector('main');
-      if (newMain) {
-        document.querySelector('main').replaceWith(newMain);
-        if (window.updateTime) window.updateTime();
+POLL_JS = """(() => {
+  let busy = false;
+  const refresh = async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const res = await fetch(window.location.href, { cache: 'no-store' });
+      if (res.ok) {
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newMain = doc.querySelector('main');
+        if (newMain) {
+          document.querySelector('main').replaceWith(newMain);
+          // Footer holds the "Updated" timestamp; swap it too so the age resets
+          const newFooter = doc.querySelector('footer');
+          const oldFooter = document.querySelector('footer');
+          if (newFooter && oldFooter) oldFooter.replaceWith(newFooter);
+          if (window.updateTime) window.updateTime();
+        }
       }
+    } catch (e) {
+      // Offline: keep existing rendered data intact without crashing
+    } finally {
+      busy = false;
     }
-  } catch (e) {
-    // Offline: keep existing rendered data intact without crashing
-  }
-}, 300000);"""
+  };
+  setInterval(refresh, 300000);
+  // Phones suspend timers in background tabs / home-screen apps: refresh on return
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refresh();
+  });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) refresh(); });
+})();"""
 
 
 def page(title: str, body: str, generated: int, lang: str = "en", app_title: str = "Atmospheric") -> str:
