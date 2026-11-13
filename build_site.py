@@ -30,7 +30,7 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from engine import WeatherPayload, deg_to_cardinal, evaluate_vibe, fetch_weather, nearest_step
+from engine import ForecastStep, WeatherPayload, deg_to_cardinal, evaluate_vibe, fetch_weather, nearest_step
 
 REGIONS: List[Tuple[str, str]] = [("BE", "🇧🇪"), ("IT", "🇮🇹"), ("EE", "🇪🇪")]
 RETRY_DELAYS = (0, 5, 15)  # seconds before each attempt
@@ -48,7 +48,9 @@ AQI = {1: ("Good", "#7ee787"), 2: ("Fair", "#67e8f9"), 3: ("Moderate", "#f9e27d"
 AQI_ET = {1: ("Hea", "#7ee787"), 2: ("Rahuldav", "#67e8f9"), 3: ("Mõõdukas", "#f9e27d"), 4: ("Halb", "#ff6b6b"), 5: ("Ohtlik", "#ff3b3b")}
 
 LIGHTING_ET = {
+    "Fog / Low Visibility": "Udu / Piiratud nähtavus",
     "Gloomy / Low Diffuse Lux": "Sombune / Hajus hämarus",
+    "Hazy / Diffused Mist": "Uduvine / Hajus valgus",
     "Filtered Sun / Soft Glare": "Filtreeritud päike / Pehme kuma",
     "Direct Bright Sun": "Otsene ere päike",
     "Darkness": "Pimedus",
@@ -145,14 +147,21 @@ nav a.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
 .tile{background:#0f141c;border:1px solid var(--line);border-radius:8px;padding:8px}
 .tile small{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 h2{font-size:12px;letter-spacing:.1em;color:var(--dim);margin:0 0 8px;text-transform:uppercase}
-.row{display:grid;grid-template-columns:3.4em 4.2em 1fr 6.8em;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:3.2em 4.0em 1fr 6.0em;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
-.row.tw{grid-template-columns:3.4em 4.2em 1fr 2.6em}
+.row.tw{grid-template-columns:3.2em 4.0em 1fr 2.6em}
+.row .wcol{text-align:right;font-size:13px;white-space:nowrap}
 .row .d{grid-column:1/-1;color:var(--dim);font-size:12px;margin-top:-4px}
 .bar{position:relative;height:18px;border-radius:4px;background:#1b2330;overflow:hidden;font-size:12px}
 .bar i{position:absolute;inset:0 auto 0 0;background:#2f5fb8}
+.bar.ice i{background:#9a3412}
+.bar.snow i{background:#0e7490}
 .bar span{position:relative;padding:0 6px;line-height:18px;white-space:nowrap}
 .wet{color:#79a6ff}.warn{color:#ff6b6b;font-weight:700}.windy{color:#ff6b6b}
+.ice{color:#f59e0b;font-weight:700}.fog{color:#d7d787}.frost{color:#67e8f9}
+.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid currentColor;letter-spacing:.04em}
+.day-sep{margin:8px 0 2px;padding-top:6px;border-top:1px dashed var(--line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.day-sep+.row{border-top:0}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 8px}
 .kv span:nth-child(odd){color:var(--dim)}
 footer{color:var(--dim);font-size:12px;text-align:center;padding:8px 0 20px}
@@ -162,6 +171,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;padding:8px 0 20px}
 .ov .top{display:flex;justify-content:space-between;align-items:baseline}
 .ov .reg{font-weight:700;font-size:18px}
 .ov .t{font-size:26px;color:#67e8f9}
+.ov .t small{font-size:14px;color:var(--dim);margin-left:4px}
 .ov h1{font-size:17px;margin:6px 0 2px}
 """
 
@@ -248,6 +258,84 @@ def nav(active: Optional[str], prefix: str) -> str:
     return f'<header><a class="brand" href="{prefix}">ATMOSPHERIC DISPATCH</a><nav>{"".join(links)}</nav></header>'
 
 
+def _format_descs(tags: Tuple[str, ...], fallback: str, is_ee: bool) -> str:
+    items = tags if tags else ((fallback,) if fallback else ("Unknown",))
+    if is_ee:
+        parts = [translate_weather_desc(t) for t in items]
+        return " + ".join([parts[0], *(p.lower() for p in parts[1:])])
+    return " + ".join(t.title() for t in items)
+
+
+def _format_vis(meters: int) -> str:
+    if meters < 1000:
+        return f"{meters} m"
+    if meters < 10000:
+        return f"{meters / 1000.0:.1f} km"
+    return "10+ km"
+
+
+def _vis_label(meters: int, is_ee: bool) -> str:
+    base = _format_vis(meters)
+    if meters < 1000:
+        return f"{base} ({'Tihe udu' if is_ee else 'Dense fog'})"
+    if meters < 4000:
+        return f"{base} ({'Uduvine' if is_ee else 'Mist'})"
+    return base
+
+
+def _format_step_precip(s: ForecastStep) -> str:
+    if s.rain_mm > 0 and s.snow_mm > 0:
+        return f"❄{s.total_precip_mm:.1f}mm"
+    if s.snow_mm > 0:
+        return f"❄{s.snow_mm:.1f}mm"
+    return f"{s.rain_mm:.1f}mm"
+
+
+def _step_context(s: ForecastStep, is_ee: bool) -> Tuple[str, str, str, str]:
+    """Return (tw_flag_html, precip_cls, bar_cls, extra_notes_html) for a forecast step."""
+    is_stormy = s.wind_speed >= 10.0 or s.effective_wind_gust >= 13.0
+    is_freezing = s.is_freezing_wet
+    is_snowy = s.snow_mm >= 0.3 or "snow" in s.desc_lower or "sleet" in s.desc_lower
+    is_foggy = s.is_dense_fog
+    is_bitter_cold = s.temp <= -5.0 or (s.feels_like is not None and s.feels_like <= -8.0)
+    is_wet_risk = s.total_precip_mm > 0.4 or s.pop > 0.5
+
+    if is_freezing:
+        flag = '<span class="ice">[!]</span>'
+    elif is_wet_risk or is_stormy or is_snowy:
+        flag = '<span class="warn">[!]</span>'
+    elif is_foggy:
+        flag = '<span class="fog">[!]</span>'
+    elif is_bitter_cold:
+        flag = '<span class="frost">[!]</span>'
+    else:
+        flag = "[-]"
+
+    bar_cls = "bar ice" if is_freezing else ("bar snow" if (s.snow_mm > 0 or is_snowy) else "bar")
+    precip_cls = "ice" if is_freezing else ("frost" if s.snow_mm > 0 else ("wet" if s.rain_mm > 0 else ""))
+
+    extras: List[str] = []
+    if is_freezing:
+        extras.append(f'<span class="ice">{"Libeduse oht" if is_ee else "Ice risk"}</span>')
+    if is_foggy and "fog" not in s.desc_lower:
+        extras.append(f'<span class="fog">{"Tihe udu" if is_ee else "Dense fog"}</span>')
+    if is_bitter_cold:
+        extras.append(f'<span class="frost">{"Karm külm" if is_ee else "Bitter cold"}</span>')
+    if s.rain_mm > 0 and s.snow_mm > 0:
+        extras.append(
+            f'{"vihm" if is_ee else "rain"} {s.rain_mm:.1f} + {"lumi" if is_ee else "snow"} {s.snow_mm:.1f}mm'
+        )
+
+    if s.visibility is not None and s.visibility < 4000:
+        extras.append(f'{"näht." if is_ee else "vis"} {_format_vis(s.visibility)}')
+    if s.feels_like is not None and abs(s.feels_like - s.temp) >= 2.5:
+        extras.append(f'{"tuntav" if is_ee else "feels"} {s.feels_like:+.0f}°')
+    if s.effective_wind_gust >= s.wind_speed + 2.0 and s.effective_wind_gust >= 10.0:
+        extras.append(f'{"iilid" if is_ee else "gusts"} {s.effective_wind_gust:.0f} m/s')
+
+    return flag, precip_cls, bar_cls, " · ".join(extras)
+
+
 def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str], generated: int) -> str:
     is_ee = (loc.region == "EE")
     lang = "et" if is_ee else "en"
@@ -268,14 +356,20 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
 
     color = COLORS.get(v.color, "#f0f6fc")
     uv = f"~{w.uv_index:.1f}" if w.uv_estimated else f"{w.uv_index:.1f}"
-    precip = f"{w.rain_amount:.1f} mm" + (f" · ❄ {w.snow_amount:.1f} mm" if w.snow_amount > 0 else "")
+    if w.snow_amount > 0 and w.rain_amount > 0:
+        precip = f"{w.rain_amount:.1f} mm · ❄ {w.snow_amount:.1f} mm"
+    elif w.snow_amount > 0:
+        precip = f"❄ {w.snow_amount:.1f} mm"
+    else:
+        precip = f"{w.rain_amount:.1f} mm"
 
-    desc_disp = translate_weather_desc(w.desc) if is_ee else w.desc.title()
+    desc_disp = _format_descs(w.effective_descs, w.desc, is_ee)
     feels_label = "tuntav" if is_ee else "feels"
     wind_label = "Tuul" if is_ee else "Wind"
     hum_label = "Õhuniiskus" if is_ee else "Humidity"
-    uv_label = "UV" if is_ee else "UV"
-    rain_now_label = "Sadu praegu" if is_ee else "Rain now"
+    dew_label = "Kastep." if is_ee else "Dew"
+    uv_label = "UV"
+    rain_now_label = "Sadu praegu" if is_ee else "Precip now"
     rain_chance_label = "Saju tõenäosus" if is_ee else "Rain chance"
     press_label = "Õhurõhk" if is_ee else "Pressure"
 
@@ -288,15 +382,31 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
         wind_sub = f'{deg_to_cardinal(w.wind_deg)} · {w.wind_deg}°'
     wind_val_cls = ' class="windy"' if (w.wind_speed >= 10.0 or gust_val >= 13.0) else ""
 
+    vis_inline = (f' · {"näht." if is_ee else "vis"} {_format_vis(w.visibility)}'
+                  if (w.visibility is not None and w.visibility < 4000) else "")
+    freeze_badge = (f' <span class="badge ice">{"JÄÄTUV SADU" if is_ee else "FREEZING PRECIP"}</span>'
+                    if w.is_freezing_wet else "")
+
+    if w.is_freezing_wet:
+        precip_sub = f'<br><span class="ice">⚠ {"Jäätuv / libe" if is_ee else "Freezing / glaze"}</span>'
+    elif w.rain_amount == 0.0 and w.snow_amount == 0.0 and w.is_wet:
+        precip_sub = f'<br><span style="color:var(--dim)">{"Nõrk tibutus" if is_ee else "Trace drizzle"}</span>'
+    else:
+        precip_sub = ""
+
+    next_precip_sub = ""
+    if w.forecast_steps and w.forecast_steps[0].total_precip_mm > 0:
+        next_precip_sub = f'<br><span style="color:var(--dim)">3h: {E(_format_step_precip(w.forecast_steps[0]))}</span>'
+
     parts = [head]
     parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v_name)}</h1><p>{E(v_quote)}</p></section>')
     parts.append(f'''<section class="card now">
-<div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}</span></div>
+<div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}{vis_inline}{freeze_badge}</span></div>
 <div class="tile"><small>{wind_label}</small><span{wind_val_cls}>{w.wind_speed:.1f} m/s</span><br><span style="color:var(--dim)">{wind_sub}</span></div>
-<div class="tile"><small>{hum_label}</small>{w.humidity}%</div>
+<div class="tile"><small>{hum_label}</small>{w.humidity}%<br><span style="color:var(--dim)">{dew_label} {w.dew_point:+.1f}°C</span></div>
 <div class="tile"><small>{uv_label}</small>{uv}</div>
-<div class="tile"><small>{rain_now_label}</small>{precip}</div>
-<div class="tile"><small>{rain_chance_label}</small>{w.rain_prob:.0f}%</div>
+<div class="tile"><small>{rain_now_label}</small>{precip}{precip_sub}</div>
+<div class="tile"><small>{rain_chance_label}</small>{w.rain_prob:.0f}%{next_precip_sub}</div>
 <div class="tile"><small>{press_label}</small>{w.pressure} hPa</div>
 </section>''')
 
@@ -313,25 +423,33 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     for s, label in tw_matches:
         day_prefix = ("Homme · " if is_ee else "Tomorrow · ") if s.day_offset > 0 else ""
         tw_label = f"{day_prefix}{label}"
-        is_stormy_step = s.wind_speed >= 10.0 or s.wind_gust >= 13.0
-        flag = '<span class="warn">[!]</span>' if (s.rain_mm > 0.4 or s.pop > 0.5 or is_stormy_step) else "[-]"
-        s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
+        flag, precip_cls, _, extras = _step_context(s, is_ee)
+        s_desc = _format_descs(s.effective_descs, s.desc, is_ee)
+        detail_parts = [f"{tw_label} · {E(s_desc)}"]
+        if extras:
+            detail_parts.append(extras)
         rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
-                    f'<span class="{"wet" if s.rain_mm > 0 else ""}">{int(s.pop*100)}% · {s.rain_mm:.1f}mm</span>'
-                    f'<span>{flag}</span><span class="d">{tw_label} · {E(s_desc)}</span></div>')
+                    f'<span class="{precip_cls}">{int(s.pop*100)}% · {_format_step_precip(s)}</span>'
+                    f'<span>{flag}</span><span class="d">{" · ".join(detail_parts)}</span></div>')
     if rows:
         tw_title = "Võtmeajad" if is_ee else "Target windows"
         parts.append(f'<section class="card"><h2>{tw_title}</h2>{"".join(rows)}</section>')
 
     frows = []
+    prev_day = w.forecast_steps[0].day_offset if w.forecast_steps else 0
     for s in w.forecast_steps:
+        if s.day_offset > prev_day:
+            frows.append(f'<h3 class="day-sep">{"Homme" if is_ee else "Tomorrow"}</h3>')
+            prev_day = s.day_offset
         pct = int(s.pop * 100)
-        s_desc = translate_weather_desc(s.desc) if is_ee else s.desc
-        is_windy_row = s.wind_speed >= 10.0 or s.wind_gust >= 13.0
+        s_desc = _format_descs(s.effective_descs, s.desc, is_ee)
+        _, _, bar_cls, extras = _step_context(s, is_ee)
+        is_windy_row = s.wind_speed >= 10.0 or s.effective_wind_gust >= 13.0
+        detail = E(s_desc) + (f" · {extras}" if extras else "")
         frows.append(f'<div class="row"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
-                     f'<div class="bar"><i style="width:{pct}%"></i><span>{pct}% · {s.rain_mm:.1f}mm</span></div>'
-                     f'<span class="{"windy" if is_windy_row else ""}" style="text-align:right">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
-                     f'<span class="d">{E(s_desc)}</span></div>')
+                     f'<div class="{bar_cls}"><i style="width:{pct}%"></i><span>{pct}% · {_format_step_precip(s)}</span></div>'
+                     f'<span class="wcol{" windy" if is_windy_row else ""}">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
+                     f'<span class="d">{detail}</span></div>')
     fc_title = "24 h prognoos" if is_ee else "24-hour forecast"
     parts.append(f'<section class="card"><h2>{fc_title}</h2>{"".join(frows)}</section>')
 
@@ -358,17 +476,20 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
         else:
             dl_disp = dl_str
         clouds_label = "Pilvisus"
+        vis_label = "Nähtavus"
         lighting_disp = LIGHTING_ET.get(eph.lighting_condition, eph.lighting_condition)
     else:
         eph_title = "Ephemeris"
         daylight_label = "Daylight"
         dl_disp = eph.daylight_left_str
         clouds_label = "Clouds"
+        vis_label = "Visibility"
         lighting_disp = eph.lighting_condition
 
+    vis_row = f'\n<span>{vis_label}</span><span>{E(_vis_label(w.visibility, is_ee))}</span>' if w.visibility is not None else ""
     parts.append(f'''<section class="card"><h2>{eph_title}</h2><div class="kv">
 <span>{daylight_label}</span><span>{E(dl_disp)}</span>
-<span>{clouds_label}</span><span>{eph.cloud_pct}% · {E(lighting_disp)}</span>
+<span>{clouds_label}</span><span>{eph.cloud_pct}% · {E(lighting_disp)}</span>{vis_row}
 {air}</div></section>''')
     app_titles = {"EE": "Ilm EE", "BE": "Weather BE", "IT": "Meteo IT"}
     app_title = app_titles.get(loc.region, f"Weather {loc.region}")
@@ -387,21 +508,38 @@ def render_overview(results, generated: int) -> str:
         v = evaluate_vibe(w)
         gust_val = w.effective_wind_gust
         has_gust = gust_val >= w.wind_speed + 2.0 and gust_val >= 11.0
+        gust_kw = "iilid" if is_ee else "gusts"
+        wind_str = f"{w.wind_speed:.0f} ({gust_kw} {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
         if is_ee:
             v_name, _ = get_ee_vibe(v.name)
-            wind_str = f"{w.wind_speed:.0f} (iilid {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
-            desc_text = f'{E(translate_weather_desc(w.desc))} · {wind_str} · {w.rain_prob:.0f}% vihma'
         elif loc.region == "BE":
             v_name, _ = get_be_vibe(v.name)
-            wind_str = f"{w.wind_speed:.0f} (gusts {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
-            desc_text = f'{E(w.desc.title())} · {wind_str} · {w.rain_prob:.0f}% rain'
         else:
             v_name = v.name
-            wind_str = f"{w.wind_speed:.0f} (gusts {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
-            desc_text = f'{E(w.desc.title())} · {wind_str} · {w.rain_prob:.0f}% rain'
+
+        desc_disp = _format_descs(w.effective_descs, w.desc, is_ee)
+        if w.snow_amount > 0 and w.rain_amount > 0:
+            precip_str = f"{w.rain_prob:.0f}% {'sadu' if is_ee else 'precip'} ({w.rain_amount:.1f}+❄{w.snow_amount:.1f} mm)"
+        elif w.snow_amount > 0:
+            precip_str = f"{w.rain_prob:.0f}% {'lumi' if is_ee else 'snow'} (❄{w.snow_amount:.1f} mm)"
+        elif w.rain_amount > 0:
+            precip_str = f"{w.rain_prob:.0f}% {'sadu' if is_ee else 'rain'} ({w.rain_amount:.1f} mm)"
+        else:
+            precip_str = f"{w.rain_prob:.0f}% {'vihma' if is_ee else 'rain'}"
+
+        ov_parts = [E(desc_disp), wind_str, precip_str]
+        if w.visibility is not None and w.visibility < 4000:
+            ov_parts.append(f"{'näht.' if is_ee else 'vis'} {_format_vis(w.visibility)}")
+        if w.is_freezing_wet:
+            ov_parts.append(f'<span class="ice">{"Jäätuv sadu" if is_ee else "Freezing precip"}</span>')
+        desc_text = " · ".join(ov_parts)
+
+        feels_small = ""
+        if abs(w.feels_like - w.temp) >= 2.5:
+            feels_small = f'<small>({"tuntav" if is_ee else "feels"} {w.feels_like:+.0f}°)</small>'
 
         cards.append(f'''<section class="card ov"><a href="./{loc.region.lower()}/">
-<div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°</span></div>
+<div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°{feels_small}</span></div>
 <h1 style="color:{COLORS.get(v.color, "#f0f6fc")}">{E(v_name)}</h1>
 <span style="color:var(--dim)">{desc_text}</span></a></section>''')
     return page("Atmospheric Dispatch", "\n".join(cards), generated, app_title="Atmospheric")

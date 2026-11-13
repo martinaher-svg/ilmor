@@ -525,6 +525,30 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "c": ("KALEVI ASSORTII", '"Eesti ilm on nagu Kalevi assortiikarp: kunagi ei tea, kas seest tuleb liköörikomm või puhas pettumus."'),
         "pick": "b",
     },
+    65: {
+        "orig_name": "BLACK ICE PROTOCOL",
+        "orig_quote": '"Liquid rain at freezing point. Every sidewalk is now an audition for Olympic figure skating."',
+        "a": ("KIILASJÄÄ", '"Vedel vihm miinuskraadiga. Kõnnitee on nüüd tasuta uisuväljak."'),
+        "b": ("MUSTA JÄÄ HÄIRE", '"Jäätuv vihm teeb asfaldi ja kruusatee hetkega peegelsiledaks. Ilma naelteta õue asja pole."'),
+        "c": ("TASUTA UISURADA", '"Vihm külmub maapinnal kohe jääks. Püsi toas või harjuta tasakaalu nagu iluuisutaja."'),
+        "pick": "b",
+    },
+    66: {
+        "orig_name": "FROSTBOUND FOG",
+        "orig_quote": '"Sub-zero pea soup. Every branch, windshield, and eyelash is slowly plating in rime ice."',
+        "a": ("KÜLMUNUD UDU", '"Miinuskraadid ja paks udu. Iga oks ja autoklaas kattub aeglaselt härmatisega."'),
+        "b": ("HÄRMATISE LÕKS", '"Nullilähedane nähtavus ja külm udu, mis kleebib härmatise otse habeme ja mütsi külge."'),
+        "c": ("JÄINE PIIMASUPP", '"Pakane udus: midagi ei näe ja ripsmedki lähevad jäässe. Küta ahi soojaks."'),
+        "pick": "b",
+    },
+    67: {
+        "orig_name": "THE MARROW SOAK",
+        "orig_quote": '"Too warm for snow, too cold to forgive. Raw rain that goes straight through wool and into your bones."',
+        "a": ("LUUDENI MÄRG", '"Lume jaoks liiga soe, kuivaks jäämiseks liiga külm. Rõske vihm poeb otse kontidesse."'),
+        "b": ("KÜLM RÕSKUS", '"Kaks kraadi sooja ja külm tibutus – täpselt selline ilm, mille jaoks Eesti sügis leiutati."'),
+        "c": ("LÖRTSIEELNE KÕLEDUS", '"Jääkülm vihm nulli piiril: lund ei tule, aga näpud on viie minutiga kanged ja kindad läbimärjad."'),
+        "pick": "a",
+    },
 }
 
 _BY_ORIG_NAME: Dict[str, Dict[str, Any]] = {
@@ -554,6 +578,8 @@ WEATHER_DESC_ET: Dict[str, str] = {
     "very heavy rain": "väga tugev vihm",
     "extreme rain": "paduvihm",
     "freezing rain": "jäätuv vihm",
+    "freezing drizzle": "jäätuv uduvihm",
+    "freezing fog": "jäätuv udu",
     "light intensity shower rain": "kerge hoovihm",
     "shower rain": "hoovihm",
     "heavy intensity shower rain": "tugev hoovihm",

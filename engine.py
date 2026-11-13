@@ -14,7 +14,7 @@ import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, FrozenSet, List, Optional
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 import httpx
 
@@ -30,8 +30,66 @@ EE: FrozenSet[str] = frozenset({"EE"})
 DEFAULT_REGION = "BE"
 
 # =====================================================================
-# DATA STRUCTURES
+# TELEMETRY HELPERS & DATA STRUCTURES
 # =====================================================================
+
+
+def compute_dew_point(temp_c: float, humidity: int) -> float:
+    """Approximate dew point in °C using the Magnus-Tetens formula."""
+    rh = max(1.0, min(100.0, float(humidity)))
+    gamma = math.log(rh / 100.0) + (17.625 * temp_c) / (243.04 + temp_c)
+    return round((243.04 * gamma) / (17.625 - gamma), 1)
+
+
+def parse_weather_tags(weather_list: Any, default: str = "") -> Tuple[str, Tuple[str, ...]]:
+    """Extract the primary OWM description plus deduplicated lowercase tags."""
+    if not isinstance(weather_list, list):
+        return (default, (default.lower(),)) if default else ("", ())
+    primary = ""
+    seen: List[str] = []
+    for item in weather_list:
+        if not isinstance(item, dict):
+            continue
+        raw = str(item.get("description") or "").strip()
+        if not raw:
+            continue
+        if not primary:
+            primary = raw
+        low = raw.lower()
+        if low not in seen:
+            seen.append(low)
+    if not primary:
+        return (default, (default.lower(),)) if default else ("", ())
+    return primary, tuple(seen)
+
+
+def _merge_descs(primary: str, extra: Tuple[str, ...]) -> Tuple[str, ...]:
+    seen: List[str] = []
+    for item in extra:
+        low = item.strip().lower()
+        if low and low not in seen:
+            seen.append(low)
+    p = primary.strip().lower()
+    if p and p not in seen:
+        seen.insert(0, p)
+    return tuple(seen)
+
+
+def _has_liquid_token(desc_blob: str) -> bool:
+    return "rain" in desc_blob or "drizzle" in desc_blob or "shower" in desc_blob
+
+
+def _is_freezing_wet(temp: float, rain_mm: float, desc_blob: str) -> bool:
+    has_liquid = rain_mm > 0.0 or _has_liquid_token(desc_blob)
+    if "freezing" in desc_blob and (has_liquid or "fog" not in desc_blob):
+        return True
+    is_frozen_type = "snow" in desc_blob or "sleet" in desc_blob
+    return temp <= 0.5 and has_liquid and not is_frozen_type
+
+
+def _is_dense_fog(desc_blob: str, visibility: Optional[int]) -> bool:
+    return "fog" in desc_blob or (visibility is not None and visibility < 1000)
+
 
 @dataclass
 class AirQualityData:
@@ -39,22 +97,59 @@ class AirQualityData:
     pm2_5: float
     pm10: float
 
+
 @dataclass
 class ForecastStep:
     time_str: str
     temp: float
     pop: float         # 0.0 to 1.0
-    rain_mm: float     # mm accumulated over the 3h step
+    rain_mm: float     # mm liquid rain/drizzle accumulated over the 3h step
     wind_speed: float  # m/s
     wind_deg: int
     desc: str
-    day_offset: int = 0  # 0 for today (relative to local time), 1 for tomorrow
+    day_offset: int = 0   # 0 for today (relative to local time), 1 for tomorrow
     wind_gust: float = 0.0  # m/s peak gust in the 3h step
+    snow_mm: float = 0.0    # mm snow accumulated over the 3h step
+    feels_like: Optional[float] = None
+    humidity: Optional[int] = None
+    visibility: Optional[int] = None
+    all_descs: Tuple[str, ...] = ()
+
+    @property
+    def total_precip_mm(self) -> float:
+        """Total precipitation (liquid + snow) in mm over the 3h step."""
+        return self.rain_mm + self.snow_mm
 
     @property
     def rain_rate(self) -> float:
-        """Average intensity in mm/h, comparable with WeatherPayload.rain_amount."""
+        """Average liquid rain intensity in mm/h, comparable with WeatherPayload.rain_amount."""
         return self.rain_mm / FORECAST_STEP_HOURS
+
+    @property
+    def effective_wind_gust(self) -> float:
+        """Peak gust in m/s (at least wind_speed)."""
+        return max(self.wind_speed, self.wind_gust)
+
+    @property
+    def effective_descs(self) -> Tuple[str, ...]:
+        """Deduplicated lowercase condition tags for this step."""
+        return _merge_descs(self.desc, self.all_descs)
+
+    @property
+    def desc_lower(self) -> str:
+        """Combined lowercase condition string for tag matching."""
+        return " ".join(self.effective_descs)
+
+    @property
+    def is_dense_fog(self) -> bool:
+        """True when fog or <1000 m visibility is forecast."""
+        return _is_dense_fog(self.desc_lower, self.visibility)
+
+    @property
+    def is_freezing_wet(self) -> bool:
+        """True when liquid precipitation falls at or below 0.5°C or freezing rain is flagged."""
+        return _is_freezing_wet(self.temp, self.rain_mm, self.desc_lower)
+
 
 @dataclass
 class EphemerisData:
@@ -62,6 +157,7 @@ class EphemerisData:
     is_day: bool
     cloud_pct: int
     lighting_condition: str
+
 
 @dataclass
 class WeatherPayload:
@@ -84,6 +180,8 @@ class WeatherPayload:
     uv_estimated: bool = False    # True when UV comes from the solar-geometry fallback
     country: str = ""             # ISO 3166 alpha-2 (e.g. "BE", "IT", "EE")
     wind_gust: float = 0.0        # m/s current wind gust
+    visibility: Optional[int] = None   # meters (OWM caps at 10000)
+    all_descs: Tuple[str, ...] = ()    # all current OWM weather tags (lowercase)
 
     @property
     def effective_wind_gust(self) -> float:
@@ -91,8 +189,18 @@ class WeatherPayload:
         return max(self.wind_speed, self.wind_gust)
 
     @property
+    def effective_descs(self) -> Tuple[str, ...]:
+        """Deduplicated lowercase weather tags reported for current conditions."""
+        return _merge_descs(self.desc, self.all_descs)
+
+    @property
     def desc_lower(self) -> str:
         return self.desc.lower()
+
+    @property
+    def all_descs_lower(self) -> str:
+        """All reported current condition tags joined for multi-tag checks."""
+        return " ".join(self.effective_descs)
 
     @property
     def region(self) -> str:
@@ -100,12 +208,36 @@ class WeatherPayload:
 
     @property
     def is_wet(self) -> bool:
-        d = self.desc_lower
-        return self.rain_amount > 0.0 or "rain" in d or "drizzle" in d or "shower" in d
+        return self.rain_amount > 0.0 or _has_liquid_token(self.all_descs_lower)
+
+    @property
+    def dew_point(self) -> float:
+        """Dew point in °C computed from air temperature and relative humidity."""
+        return compute_dew_point(self.temp, self.humidity)
+
+    @property
+    def dew_spread(self) -> float:
+        """Temperature minus dew point in °C."""
+        return round(self.temp - self.dew_point, 1)
+
+    @property
+    def is_dense_fog(self) -> bool:
+        """True when fog or <1000 m visibility is present."""
+        return _is_dense_fog(self.all_descs_lower, self.visibility)
+
+    @property
+    def is_freezing_wet(self) -> bool:
+        """True when freezing rain is reported or liquid precipitation falls at <= 0.5°C."""
+        return _is_freezing_wet(self.temp, self.rain_amount, self.all_descs_lower)
 
     @property
     def is_night(self) -> bool:
         return self.local_hour > 20 or self.local_hour < 6
+
+    @property
+    def is_after_dark(self) -> bool:
+        """True after local sunset or during late-night clock hours."""
+        return self.is_night or not self.ephemeris.is_day
 
     @property
     def is_morning(self) -> bool:
@@ -126,10 +258,21 @@ class VibeRule:
 SEVERE_RAIN_DESCS = ("heavy intensity rain", "very heavy rain", "extreme rain", "heavy intensity shower rain")
 
 def _heavy_desc(w: WeatherPayload) -> bool:
-    d = w.desc_lower
+    d = w.all_descs_lower
     if any(k in d for k in SEVERE_RAIN_DESCS):
         return True
     return "moderate rain" in d and w.rain_amount >= 1.0
+
+
+def _is_silent_hill(w: WeatherPayload) -> bool:
+    """Calm dense fog <= 20°C, or calm dry mist (< 2500 m) above frost threshold."""
+    if w.temp > 20.0 or _is_high_wind(w):
+        return False
+    if w.is_dense_fog:
+        return True
+    has_mist = "mist" in w.all_descs_lower and (w.visibility is None or w.visibility < 2500)
+    has_low_vis = w.visibility is not None and w.visibility < 2000
+    return (has_mist or has_low_vis) and not w.is_wet and w.temp >= 5.0
 
 def _is_gale(w: WeatherPayload) -> bool:
     """Severe storm / gale-force sustained wind or damaging gusts."""
@@ -184,29 +327,33 @@ def wind_from(w: WeatherPayload, lo: int, hi: int) -> bool:
 VIBE_RULES: List[VibeRule] = [
     # 1. EXTREMES, STORMS & POP CULTURE
     VibeRule("GHOSTBUSTERS", "bright_yellow", '"There is no Dana, only Zuul!" Unplug electronics.',
-             priority=1000, condition=lambda w: "thunder" in w.desc_lower),
+             priority=1000, condition=lambda w: "thunder" in w.all_descs_lower),
     VibeRule("THE EYEWALL", "bright_red", '"Hold onto your hats, your neighbors\' sheds, and your dignity."',
              priority=990, condition=_is_gale),
     VibeRule("HOTH", "bright_white", '"Your Tauntaun will freeze. Stay inside and expand the factory."',
-             priority=980, condition=lambda w: "snow" in w.desc_lower or "sleet" in w.desc_lower or w.snow_amount > 0.0),
+             priority=980, condition=lambda w: "snow" in w.all_descs_lower or "sleet" in w.all_descs_lower or w.snow_amount > 0.0),
+    VibeRule("BLACK ICE PROTOCOL", "bright_yellow", '"Liquid rain at freezing point. Every sidewalk is now an audition for Olympic figure skating."',
+             priority=975, condition=lambda w: w.is_freezing_wet),
+    VibeRule("FROSTBOUND FOG", "bright_white", '"Sub-zero pea soup. Every branch, windshield, and eyelash is slowly plating in rime ice."',
+             priority=972, condition=lambda w: (w.temp <= -0.5 or "freezing fog" in w.all_descs_lower) and w.is_dense_fog and not _is_high_wind(w)),
     VibeRule("THE STEAM ROOM", "khaki", '"Opaque AND sweaty. The worst kind of sauna."',
-             priority=970, condition=lambda w: ("fog" in w.desc_lower or "mist" in w.desc_lower) and w.temp > 20.0),
+             priority=970, condition=lambda w: (w.is_dense_fog or "mist" in w.all_descs_lower) and w.temp > 20.0),
     VibeRule("LIBECCIO", "bright_blue", '"The Libeccio is hurling the Tyrrhenian at the coast. Stay off the pier and tie down the ombrellone."',
              priority=968, regions=IT, condition=lambda w: wind_from(w, 200, 250) and (w.wind_speed > 9.0 or (w.wind_speed >= 7.0 and w.effective_wind_gust >= 13.0))),
     VibeRule("THE HORIZONTAL SHOWER", "bright_blue", '"Umbrellas are useless here. Embrace the suck."',
              priority=965, condition=lambda w: w.temp < 24.0 and _is_wet_windy(w)),
-    VibeRule("SILENT HILL", "light_slate_grey", '"Watch out for Pyramid Head."',
-             priority=960, condition=lambda w: ("fog" in w.desc_lower or "mist" in w.desc_lower) and not _is_high_wind(w)),
 
-    # 2. SEVERE PRECIPITATION (calm-to-moderate wind; windstorms caught above)
+    # 2. SEVERE PRECIPITATION & DENSE FOG (freezing precip & gale-force wind caught above)
     VibeRule("TROPICAL DEPRESSION", "bright_blue", '"Warm and aggressively wet. Basically a jungle minus the exotic birds."',
              priority=955, condition=lambda w: w.temp >= 20.0 and (w.rain_amount > 4.0 or (w.is_wet and any(s.rain_rate > 4.0 for s in w.forecast_steps[:1])))),
     VibeRule("NOAH'S ARK", "bright_cyan", '"Might want to build that ark."',
              priority=950, condition=lambda w: w.rain_amount > 4.0 or (w.rain_prob > 85 and w.rain_amount > 2.5) or (w.rain_amount >= 1.5 and any(s.rain_rate > 4.0 for s in w.forecast_steps[:2]))),
     VibeRule("THE LUKEWARM WASH", "bright_cyan", '"Like standing in a mildly neglected public shower."',
-             priority=930, condition=lambda w: 16.0 <= w.temp <= 20.0 and (w.rain_amount > 2.0 or ("rain" in w.desc_lower and w.rain_amount > 1.0))),
+             priority=930, condition=lambda w: 16.0 <= w.temp <= 20.0 and (w.rain_amount > 2.0 or ("rain" in w.all_descs_lower and w.rain_amount > 1.0))),
     VibeRule("PROPER RAIN", "bright_blue", '"Get the umbrella. The heavy-duty one."',
              priority=920, condition=lambda w: 1.5 < w.rain_amount <= 4.0 or _heavy_desc(w)),
+    VibeRule("SILENT HILL", "light_slate_grey", '"Watch out for Pyramid Head."',
+             priority=915, condition=_is_silent_hill),
 
     # 3. EXTREME HEAT
     VibeRule("BOILED ALIVE", "bright_red", '"Remember that one time you hiked a volcano in the Philippines..."',
@@ -222,11 +369,11 @@ VIBE_RULES: List[VibeRule] = [
 
     # 4. STRONG WINDS, EXTREME COLD & NIGHT CONDITIONS
     VibeRule("THE WHITE WALKER", "bright_cyan", '"Winter is here. Don\'t go outside unless you have Valyrian steel."',
-             priority=855, condition=lambda w: w.is_night and w.temp < 0.0 and (w.wind_speed > 5.0 or w.effective_wind_gust > 8.0)),
+             priority=855, condition=lambda w: w.is_after_dark and w.temp < 0.0 and (w.wind_speed > 5.0 or w.effective_wind_gust > 8.0)),
     VibeRule("THE WIND TUNNEL", "bright_cyan", '"It\'s not just cold; the air is actively trying to peel the skin off your face."',
              priority=852, condition=lambda w: w.temp < 10.0 and _is_high_wind(w)),
     VibeRule("BALTIC FREEZE", "bright_cyan", '"Nose hairs freezing on contact. Thermal base layers mandatory."',
-             priority=850, condition=lambda w: w.temp <= -3.0),
+             priority=850, condition=lambda w: w.temp <= -3.0 or (w.temp <= 1.0 and w.feels_like <= -6.0)),
     VibeRule("THE INVISIBLE HAND", "bright_cyan", '"Mother Nature is trying to physically shove you back indoors."',
              priority=848, condition=lambda w: 8.0 <= w.temp <= 25.0 and not w.is_wet and _is_storm_wind(w)),
     VibeRule("TRAMONTANA", "bright_cyan", '"Crystal clear and freezing, straight down off the mountains. Even the statues are shivering."',
@@ -234,7 +381,9 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("BAD HAIR DAY", "bright_yellow", '"Your hairgel has no power here."',
              priority=835, condition=lambda w: 8.0 <= w.temp <= 25.0 and not w.is_wet and _is_high_wind(w)),
     VibeRule("BONE CHILL", "bright_white", '"Excellent weather to stay indoors and stare at your Steam library."',
-             priority=830, condition=lambda w: w.temp < 5.0 and w.humidity > 90 and not w.is_wet),
+             priority=830, condition=lambda w: w.temp < 5.0 and (w.humidity > 90 or w.dew_spread <= 1.5) and not w.is_wet),
+    VibeRule("THE MARROW SOAK", "bright_blue", '"Too warm for snow, too cold to forgive. Raw rain that goes straight through wool and into your bones."',
+             priority=825, condition=lambda w: 0.5 < w.temp < 6.0 and w.is_wet and (not w.is_morning or w.temp < 3.0)),
     VibeRule("SWAMP NIGHT", "sea_green2", '"Turn the fans on high and pray for morning."',
              priority=810, condition=lambda w: w.is_night and w.temp > 20.0 and w.humidity > 80),
     VibeRule("SÄÄSED", "dark_olive_green3", '"The true apex predator of the Estonian forest has hatched. Long sleeves, DEET, and accept your fate."',
@@ -247,12 +396,12 @@ VIBE_RULES: List[VibeRule] = [
              priority=790, condition=lambda w: w.is_night and not w.is_wet and w.temp > 15.0),
     VibeRule("NIGHT CRAWLER", "dim white", '"Go out if you must, but consider the cost."',
              priority=780, condition=lambda w: w.is_night and not w.is_wet and 10.0 <= w.temp <= 15.0),
+    VibeRule("SUITSUSAUN", "dark_orange", '"Smoke sauna weather. Fire up the suitsusaun, then roll in the snow (or the pond) like a true local."',
+             priority=778, regions=EE, condition=lambda w: w.temp < 5.0 and 16 <= w.local_hour <= 23 and w.wind_speed < 10.0 and not w.is_wet),
     VibeRule("PIMEDUS", "grey50", '"Pimedus: the darkness. It\'s mid-afternoon and pitch black. Vitamin D is now a personality trait."',
-             priority=775, regions=EE, condition=lambda w: not w.ephemeris.is_day and 14 <= w.local_hour <= 19),
+             priority=775, regions=EE, condition=lambda w: not w.ephemeris.is_day and 14 <= w.local_hour <= 19 and not w.is_wet),
     VibeRule("COCOA TIME", "sandy_brown", '"Warm cup of chocolate and back to bed."',
              priority=770, condition=lambda w: w.is_night and not w.is_wet and 3.0 < w.temp < 10.0),
-    VibeRule("SUITSUSAUN", "dark_orange", '"Smoke sauna weather. Fire up the suitsusaun, then roll in the snow (or the pond) like a true local."',
-             priority=765, regions=EE, condition=lambda w: w.temp < 5.0 and 16 <= w.local_hour <= 23 and w.wind_speed < 10.0 and not w.is_wet),
     VibeRule("SCIROCCO", "orange3", '"Hot, sticky, Saharan dust on the car and everyone is irritable. It\'s not you, it\'s the Scirocco."',
              priority=760, regions=IT, condition=lambda w: wind_from(w, 100, 170) and w.wind_speed >= 3.0 and w.temp >= 18.0 and w.humidity >= 50 and not w.is_wet),
 
@@ -292,11 +441,11 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("FOOL'S SUMMER", "bright_red", '"Looks like July, feels like October. Don\'t pack the coats away yet."',
              priority=570, condition=lambda w: 14.0 <= w.temp <= 18.0 and w.uv_index > 4.5 and w.wind_speed < 3.0 and not w.is_wet),
     VibeRule("GARDEN WARRIOR", "bright_green", '"Crisp, clear, and calm. Prime weather to test out a heavy-duty shredder on some branches."',
-             priority=550, condition=lambda w: 13.0 <= w.temp <= 16.0 and "clear" in w.desc_lower and w.wind_speed < 2.0),
+             priority=550, condition=lambda w: 13.0 <= w.temp <= 16.0 and "clear" in w.all_descs_lower and w.wind_speed < 2.0),
     VibeRule("THE WIND CHILL", "bright_cyan", '"The sun is trying its best, but the wind hates you."',
              priority=540, condition=lambda w: 10.0 <= w.temp <= 16.0 and w.uv_index > 3.5 and (w.wind_speed > 6.0 or w.effective_wind_gust >= 10.0) and not w.is_wet),
     VibeRule("PERPETUAL GLOOM", "dim white", '"It\'s barely raining, but your soul is still getting wet."',
-             priority=530, condition=lambda w: 10.0 <= w.temp <= 15.0 and w.rain_prob > 75.0 and w.rain_amount < 0.5),
+             priority=530, condition=lambda w: 5.0 <= w.temp <= 15.0 and w.rain_prob > 75.0 and w.rain_amount < 0.5),
     VibeRule("THE VOID", "bright_white", '"Absolutely nothing is happening out there. Perfect stasis."',
              priority=520, condition=lambda w: 8.0 <= w.temp <= 13.0 and w.wind_speed < 1.0 and not w.is_wet),
 
@@ -310,7 +459,7 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("UDUVIHM", "sky_blue2", '"Uduvihm: literally \'fog-rain\'. Estonian has a word for it because it is always happening."',
              priority=490, regions=EE, condition=lambda w: w.temp < 22.0 and w.is_wet),
     VibeRule("THE MATTE FINISH", "light_slate_grey", '"No sun, no rain, dry air. The weather is buffering."',
-             priority=480, condition=lambda w: 17.0 <= w.temp <= 22.0 and "cloud" in w.desc_lower and w.humidity < 50 and not w.is_wet),
+             priority=480, condition=lambda w: 17.0 <= w.temp <= 22.0 and "cloud" in w.all_descs_lower and w.humidity < 50 and not w.is_wet),
     VibeRule("THE FALSE SPRING", "bright_green", '"Nature is gaslighting you. It looks warm, but the air will still bite."',
              priority=470, condition=lambda w: 3.0 < w.temp < 13.0 and w.uv_index > 3.0 and not w.is_wet),
 
@@ -324,7 +473,7 @@ VIBE_RULES: List[VibeRule] = [
     VibeRule("BIG GREEN EGG TERRITORY", "bright_yellow", '"Looks like meat\'s back on the menu, boys!"',
              priority=390, condition=lambda w: 18.0 <= w.temp <= 25.0 and w.rain_prob < 20.0 and w.wind_speed < 5.0 and not w.is_wet),
     VibeRule("OVERCAST VELVET", "light_slate_grey", '"Zero glare, uniform diffuse lighting. Optimal hacking state."',
-             priority=387, condition=lambda w: "overcast" in w.desc_lower and not w.is_wet and w.wind_speed < 5.0 and 10.0 <= w.temp <= 25.0),
+             priority=387, condition=lambda w: "overcast" in w.all_descs_lower and not w.is_wet and w.wind_speed < 5.0 and 10.0 <= w.temp <= 25.0),
     VibeRule("THE PATIO GAMBLE", "khaki1", '"Lovely right now, but the forecast has trust issues. Eat outside, but sit near the door."',
              priority=385, condition=lambda w: 18.0 <= w.temp <= 25.0 and w.wind_speed < 5.0 and not w.is_wet),
     VibeRule("THE BRISK BREEZE", "bright_yellow", '"Nice temperature, but the wind is trying to steal your napkins."',
@@ -382,14 +531,22 @@ def solar_elevation_deg(lat: float, lon: float, ts: float) -> float:
     cos_zen = math.sin(lat_r) * math.sin(decl) + math.cos(lat_r) * math.cos(decl) * math.cos(hour_angle)
     return 90.0 - math.degrees(math.acos(max(-1.0, min(1.0, cos_zen))))
 
-def estimate_uv(lat: float, lon: float, ts: float, cloud_pct: int) -> float:
+def estimate_uv(
+    lat: float,
+    lon: float,
+    ts: float,
+    cloud_pct: int,
+    has_fog: bool = False,
+    has_mist: bool = False,
+) -> float:
     lat = round(lat, 1)
     lon = round(lon, 1)
     elev = solar_elevation_deg(lat, lon, ts)
     if elev <= 0.0:
         return 0.0
+    eff_cloud = max(cloud_pct, 85 if has_fog else (60 if has_mist else cloud_pct))
     clear_sky = 12.5 * math.sin(math.radians(elev)) ** 2.42
-    return round(clear_sky * (1.0 - 0.75 * (cloud_pct / 100.0) ** 3.4), 1)
+    return round(clear_sky * (1.0 - 0.75 * (eff_cloud / 100.0) ** 3.4), 1)
 
 # =====================================================================
 # DATA FETCHING
@@ -460,15 +617,32 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
     now_local_dt = datetime.fromtimestamp(now_ts + tz_offset, tz=timezone.utc)
     local_hour = now_local_dt.hour
 
+    primary_desc, curr_descs = parse_weather_tags(d_curr.get("weather"), default="Unknown")
+    curr_vis_raw = d_curr.get("visibility")
+    curr_vis = int(curr_vis_raw) if curr_vis_raw is not None else None
+    curr_blob = " ".join(curr_descs)
+    has_fog = _is_dense_fog(curr_blob, curr_vis)
+    has_mist = (not has_fog) and (
+        "mist" in curr_blob or "haze" in curr_blob or (curr_vis is not None and curr_vis < 4000)
+    )
+
     uv_estimated = uv_val is None
     if uv_val is None:
-        uv_val = estimate_uv(lat, lon, now_ts, cloud_pct)
+        uv_val = estimate_uv(lat, lon, now_ts, cloud_pct, has_fog=has_fog, has_mist=has_mist)
 
     if is_day:
         rem = max(0, ss - now_ts)
         daylight_str = f"{int(rem // 3600):02d}h {int((rem % 3600) // 60):02d}m"
-        lighting = ("Gloomy / Low Diffuse Lux" if cloud_pct > 80 else
-                    "Filtered Sun / Soft Glare" if cloud_pct > 40 else "Direct Bright Sun")
+        if has_fog:
+            lighting = "Fog / Low Visibility"
+        elif cloud_pct > 80:
+            lighting = "Gloomy / Low Diffuse Lux"
+        elif has_mist:
+            lighting = "Hazy / Diffused Mist"
+        elif cloud_pct > 40:
+            lighting = "Filtered Sun / Soft Glare"
+        else:
+            lighting = "Direct Bright Sun"
     else:
         daylight_str, lighting = "Night Cycle", "Darkness"
     ephemeris = EphemerisData(daylight_str, is_day, cloud_pct, lighting)
@@ -487,19 +661,29 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
                     return float(block["1h"]) * FORECAST_STEP_HOURS
             return 0.0
 
-        rain_val = _step_precip("rain") + _step_precip("snow")
         step_wind = float(entry.get("wind", {}).get("speed", 0.0))
         step_gust = max(step_wind, float(entry.get("wind", {}).get("gust") or 0.0))
+        step_vis_raw = entry.get("visibility")
+        step_vis = int(step_vis_raw) if step_vis_raw is not None else None
+        step_primary_desc, step_descs = parse_weather_tags(entry.get("weather"))
+        step_main = entry.get("main", {})
+        step_feels_raw = step_main.get("feels_like")
+        step_hum_raw = step_main.get("humidity")
         steps.append(ForecastStep(
             time_str=step_dt.strftime("%H:%M"),
-            temp=float(entry.get("main", {}).get("temp", 0.0)),
+            temp=float(step_main.get("temp", 0.0)),
             pop=float(entry.get("pop", 0.0)),
-            rain_mm=rain_val,
+            rain_mm=_step_precip("rain"),
             wind_speed=step_wind,
             wind_deg=int(entry.get("wind", {}).get("deg", 0)),
-            desc=entry.get("weather", [{}])[0].get("description", "").title(),
+            desc=step_primary_desc.title(),
             day_offset=day_offset,
             wind_gust=step_gust,
+            snow_mm=_step_precip("snow"),
+            feels_like=float(step_feels_raw) if step_feels_raw is not None else None,
+            humidity=int(step_hum_raw) if step_hum_raw is not None else None,
+            visibility=step_vis,
+            all_descs=step_descs,
         ))
 
     def _current_mm(key: str) -> float:
@@ -524,7 +708,7 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
         pressure=int(d_curr.get("main", {}).get("pressure", 1013)),
         wind_speed=curr_wind,
         wind_deg=int(d_curr.get("wind", {}).get("deg", 0)),
-        desc=d_curr.get("weather", [{}])[0].get("description", "Unknown"),
+        desc=primary_desc,
         forecast_steps=steps,
         ephemeris=ephemeris,
         aqi_data=aqi_data,
@@ -536,6 +720,8 @@ async def fetch_weather(client: httpx.AsyncClient, api_key: str, lat: float, lon
         uv_estimated=uv_estimated,
         country=country,
         wind_gust=curr_gust,
+        visibility=curr_vis,
+        all_descs=curr_descs,
     )
 
 def nearest_step(steps: List[ForecastStep], target_hr: int, tolerance_hr: int = 1) -> Optional[ForecastStep]:
