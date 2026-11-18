@@ -1,19 +1,26 @@
 """
 Estonian translations and localized vibes for the EE region dashboard.
-Contains 3 alternatives for each vibe:
+Contains a facts-only trigger description and 3 alternatives for each vibe:
   a: Otsetõlge (Direct translation attempt)
   b: Tavaline nali (Standard joke)
   c: Väga eestlaslik nali (Very Estonian joke)
 
 Each vibe has a default 'pick'. To switch a vibe's translation,
 simply update the 'pick' field ('a', 'b', or 'c') for that vibe ID.
+
+Also exports Estonian label maps and translation helpers for OpenWeatherMap
+descriptions, canonical atmospheric factors (`engine.FACTOR_VOCAB`), vibe
+synergy labels (`engine.SYNERGY_LABELS`), and forecast step conditions
+(`engine.STEP_KIND_LABELS`).
 """
 
 from __future__ import annotations
-from typing import Dict, Tuple, Any
+
+from typing import Any, Dict, Tuple
 
 VIBES_EE: Dict[int, Dict[str, Any]] = {
     1: {
+        "trigger": "Äike ilma tugeva tuule, paduvihma või raheta",
         "orig_name": "GHOSTBUSTERS",
         "orig_quote": '"There is no Dana, only Zuul!" Unplug electronics.',
         "a": ("TONDIPÜÜDJAD", '"Daanat pole, on vaid Zuul!" Tõmba elektroonika seinast välja.'),
@@ -22,6 +29,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     2: {
+        "trigger": "Kuiv marutuul (≥15 m/s või iilid ≥21 m/s) üle nulli (+0.5°C+)",
         "orig_name": "THE EYEWALL",
         "orig_quote": '"Hold onto your hats, your neighbors\' sheds, and your dignity."',
         "a": ("TORMISEIN", '"Hoidke kinni oma mütsidest, naabrite kuuridest ja oma väärikusest."'),
@@ -30,22 +38,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     3: {
+        "trigger": "Puhas lumesadu (ilma lörtsi ja tugeva tuisutuuleta)",
         "orig_name": "HOTH",
         "orig_quote": '"Your Tauntaun will freeze. Stay inside and expand the factory."',
         "a": ("HOTH", '"Sinu Tauntaun külmub ära. Püsi toas ja laienda tehast."'),
-        "b": ("JÄÄAEG", '"Nii külm, et pingviinidki paluvad tuppa laskmist. Püsi teki all ja lülita arvuti sisse."'),
+        "b": ("JÄÄAEG", '"Lumi katab kõik vaikselt kinni. Püsi teki all, keeda teed ja lülita arvuti sisse."'),
         "c": ("TÕELINE SUUSAILM", '"Lumi on nabani ja nina külmub ära. Õige eestlane määrib suusad ja läheb ikka rajale."'),
         "pick": "c",
     },
     4: {
+        "trigger": "Kuiv soe tihe udu või uduvine (>20°C, ilma tugeva tuuleta)",
         "orig_name": "THE STEAM ROOM",
         "orig_quote": '"Opaque AND sweaty. The worst kind of sauna."',
-        "a": ("AURUBAAS", '"Läbipaistmatu JA higine. Halvimat sorti saun."'),
+        "a": ("AURUSAUN", '"Läbipaistmatu JA higine. Halvimat sorti saun."'),
         "b": ("TÜRGI SAUN", '"Nähtavus null ja särk kleepub selga. Nagu elaks veekeetja sees."'),
         "c": ("VALE LEIL", '"Nagu oleks keegi saunas liiga palju vett kerisele visanud ja ventilatsiooni kinni müürinud."'),
         "pick": "c",
     },
     5: {
+        "trigger": "Kuiv tihe udu (5–20°C) või uduvine (<2500 m), ilma tugeva tuuleta",
         "orig_name": "SILENT HILL",
         "orig_quote": '"Watch out for Pyramid Head."',
         "a": ("SILENT HILL", '"Hoidu Püramiidpea eest."'),
@@ -54,14 +65,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     6: {
+        "trigger": "Soe paduvihm (≥20°C, tugev sadu praegu või järgmises 3 h sammus, ilma tugeva tuuleta)",
         "orig_name": "TROPICAL DEPRESSION",
         "orig_quote": '"Warm and aggressively wet. Basically a jungle minus the exotic birds."',
         "a": ("TROOPILINE MADALRÕHKKOND", '"Soe ja agressiivselt märg. Põhimõtteliselt džungel miinus eksootilised linnud."'),
-        "b": ("LÄPPUV PADUKAS", '"Soe ja läbimärg korraga. Hingad vett ja higistad vihma."'),
+        "b": ("LÄMBE PADUKAS", '"Soe ja läbimärg korraga. Hingad vett ja higistad vihma."'),
         "c": ("AMAZONAS KODUÕUEL", '"Soe nagu troopikas, aga džunglilindude asemel näed vihmausse ja rähne."'),
         "pick": "b",
     },
     7: {
+        "trigger": "Tugev paduvihm (>4 mm/h või tugev sajuprognoos) ilma tugeva tuule ja tiheda uduta",
         "orig_name": "NOAH'S ARK",
         "orig_quote": '"Might want to build that ark."',
         "a": ("NOA LAEV", '"Võiks hakata laeva ehitama."'),
@@ -70,6 +83,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     8: {
+        "trigger": "Mahe mõõdukas vihm (16–22°C, >1–2 mm/h, mitte paduvihm) ilma tugeva tuule ja uduta",
         "orig_name": "THE LUKEWARM WASH",
         "orig_quote": '"Like standing in a mildly neglected public shower."',
         "a": ("LEIGE PESU", '"Nagu seisaks veidi hooletusse jäetud avaliku duši all."'),
@@ -78,22 +92,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     9: {
+        "trigger": "Mõõdukas/korralik vihm (>1.5 mm/h) ilma tugeva tuule, külma või uduta",
         "orig_name": "PROPER RAIN",
         "orig_quote": '"Get the umbrella. The heavy-duty one."',
         "a": ("KORRALIK VIHM", '"Võta vihmavari. See tugevam eksemplar."'),
-        "b": ("VALAB NAGU OAVARREST", '"Tavaline vihmavari lendab tagurpidi. Otsi välja kummikud ja tormikindlus."'),
+        "b": ("VALAB NAGU OAVARREST", '"Tavaline vihmavari jääb hätta. Otsi välja kummikud ja korralik vihmajope."'),
         "c": ("PÕLLUMEHE RÕÕM", '"Sajab mehiselt. Võta kapist kollane kalamehejope ja ära unusta kummikuid."'),
         "pick": "c",
     },
     10: {
+        "trigger": "Kuiv äärmuslik kuumus (>31°C) + kõrge õhuniiskus (>70%)",
         "orig_name": "BOILED ALIVE",
         "orig_quote": '"Remember that one time you hiked a volcano in the Philippines..."',
         "a": ("ELUSALT KEEDETUD", '"Mäletad seda korda, kui matkasid Filipiinidel vulkaani otsa..."'),
         "b": ("KEEDUPOTT", '"Õhku pole, ainult kuum aur. Liigutamine on rangelt keelatud."'),
-        "c": ("EESTLASE LÕPP", '"Üle 30 kraadi ja niiske. Eestlase geneetika pole selleks loodud, sulame ära."'),
+        "c": ("EESTLASE LÕPP", '"Üle 31 kraadi ja niiske. Eestlase geneetika pole selleks loodud, sulame ära."'),
         "pick": "c",
     },
     11: {
+        "trigger": "Kuiv valge aeg (>31°C, ilma kõrge niiskuseta >70%)",
         "orig_name": "THE SURFACE OF THE SUN",
         "orig_quote": '"The asphalt is melting. Stay inside or suffer."',
         "a": ("PÄIKESE PIND", '"Asfalt sulab. Püsi toas või kannata."'),
@@ -102,22 +119,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     12: {
+        "trigger": "Kuiv valge aeg (25–31°C) + väga madal õhuniiskus (<30%) + vaikne/nõrk tuul",
         "orig_name": "THE DRY HEAT",
-        "orig_quote": '"It\'s like a hair dryer is constantly blowing on your face. Moisturize now."',
-        "a": ("KUIV KUUMUS", '"Nagu föön puhuks pidevalt näkku. Niisuta nahka kohe."'),
-        "b": ("FÖÖN NÄOS", '"Tuul ei jahuta, vaid kuivatab su ära nagu rosinad ahjus."'),
-        "c": ("KÕRB KODUMAAL", '"Kuum tuul kuivatab silmamunad ära. Kartulipealsed kolletavad ja huulepulk sulab taskus."'),
+        "orig_quote": '"Baked, bone-dry stillness. Drink twice as much water as you think you need."',
+        "a": ("KUIV KUUMUS", '"Küpsetav, luukuiv vaikus. Joo kaks korda rohkem vett, kui arvad end vajavat."'),
+        "b": ("KUIV LEITSAK", '"Õhk seisab ja on kuiv nagu saepuru. Joo vett enne, kui huuled pragunevad."'),
+        "c": ("KÕRB KODUMAAL", '"Seisev kuiv kuumus kuivatab kurgu ja muru krõbedaks. Kastekannud käima ja veepudel kätte."'),
         "pick": "b",
     },
     13: {
+        "trigger": "Kuiv valge aeg (25–31°C) + kõrge õhuniiskus (>75%) + vaikne/nõrk tuul",
         "orig_name": "THE SAUNA SESSION",
         "orig_quote": '"You aren\'t breathing air as much as warm soup."',
         "a": ("SAUNASESS", '"Sa ei hinga niivõrd õhku, kuivõrd sooja suppi."'),
-        "b": ("LEILITOBA", '"Õhk on nii paks, et seda saab noaga leivale määrida."'),
+        "b": ("LEILITUBA", '"Õhk on nii paks, et seda saab noaga leivale määrida."'),
         "c": ("KÕVA LEIL", '"Hingad sisse suppi, mitte õhku. Kus on viht ja külm kali?"'),
         "pick": "c",
     },
     14: {
+        "trigger": "Kuiv valge aeg (25–31°C) + väga kõrge UV-indeks (>7.0)",
         "orig_name": "THE DEADLY LASER",
         "orig_quote": '"The sun is a deadly laser. Don\'t look directly at it."',
         "a": ("SURMAV LASER", '"Päike on surmav laser. Ära vaata otse selle sisse."'),
@@ -126,14 +146,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     15: {
+        "trigger": "Kuiv pime/hämar aeg + miinuskraadid (<0°C) + mõõdukas või tugevam tuul",
         "orig_name": "THE WHITE WALKER",
         "orig_quote": '"Winter is here. Don\'t go outside unless you have Valyrian steel."',
         "a": ("TALI TULEB", '"Talv on käes. Ära mine välja, kui sul pole Valüüria terast."'),
-        "b": ("JÄÄKUNINGAS", '"Külm tuul lõikab luudeni. Õues liiguvad ainult hullud ja lumesahad."'),
+        "b": ("JÄÄKUNINGAS", '"Külm öötuul lõikab luudeni. Õues liiguvad ainult hullud ja lumesahad."'),
         "c": ("PÕHJALA KÜLM", '"Öökülm ja tuul võtavad hinge kinni. Ilma vildikate ja villase kampsunita oled poole tunniga lumememm."'),
         "pick": "a",
     },
     16: {
+        "trigger": "Kuiv sügav pakane (≤-3°C või ≤1°C tuntavaga ≤-6°C) ilma tugeva tuule ja selge päikeseta",
         "orig_name": "BALTIC FREEZE",
         "orig_quote": '"Nose hairs freezing on contact. Thermal base layers mandatory."',
         "a": ("BALTI PAKANE", '"Ninakarvad külmuvad hetkega. Soe pesu on kohustuslik."'),
@@ -142,14 +164,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     17: {
+        "trigger": "Kuiv külm õhk (<10°C) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
         "orig_name": "THE WIND TUNNEL",
         "orig_quote": '"It\'s not just cold; the air is actively trying to peel the skin off your face."',
         "a": ("TUULETUNNEL", '"See pole lihtsalt külm; õhk üritab su näolt naha maha koorida."'),
-        "b": ("LÕIKAV IIL", '"Tuul puhub otse läbi jope ja üritab näonahka kaasa viia."'),
+        "b": ("LÕIKAV TUUL", '"Tuul puhub otse läbi jope ja üritab näonahka kaasa viia."'),
         "c": ("LÕIKAV IIL", '"Külm tuul nülib nägu nagu nüri pussiga. Tõmba kapuuts silmini ja kiru ilmaelu."'),
         "pick": "c",
     },
     18: {
+        "trigger": "Kuiv külm (<5°C) + küllastunud niiskus (≥90% või kastepunktivahe ≤1.5°C) ilma tugeva tuuleta",
         "orig_name": "BONE CHILL",
         "orig_quote": '"Excellent weather to stay indoors and stare at your Steam library."',
         "a": ("LUUVALU KÜLM", '"Suurepärane ilm toas püsimiseks ja oma Steami mängude nimekirja jõllitamiseks."'),
@@ -158,6 +182,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     19: {
+        "trigger": "Kuiv pime aeg / öö + soe (>20°C) + kõrge õhuniiskus (>75%)",
         "orig_name": "SWAMP NIGHT",
         "orig_quote": '"Turn the fans on high and pray for morning."',
         "a": ("SOO-ÖÖ", '"Pane ventilaatorid põhja ja palveta hommikut."'),
@@ -166,6 +191,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     20: {
+        "trigger": "EE: kuiv valge öö (kell ≥21 või <6, aga päike veel üleval), >8°C, tuul kuni mõõdukas",
         "orig_name": "VALGED ÖÖD",
         "orig_quote": '"White nights. It\'s past 21:00 and the sun refuses to clock out. Neither do the mosquitoes."',
         "a": ("VALGED ÖÖD", '"Valged ööd. Kell on üle 21 ja päike ei kavatsegi lahkuda. Sääsed samuti mitte."'),
@@ -174,6 +200,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     21: {
+        "trigger": "Kuiv pime aeg / öö, 19–22°C, madal niiskus (<60%), vaikne/nõrk tuul",
         "orig_name": "THE RARE EVENING",
         "orig_quote": '"Actually pleasant after dark. A statistical anomaly."',
         "a": ("HARULDANE ÕHTU", '"Pärast pimedat on tegelikult meeldiv. Statistiline anomaalia."'),
@@ -182,6 +209,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     22: {
+        "trigger": "Kuiv mahe pime aeg / öö, >15°C, tuul kuni mõõdukas",
         "orig_name": "MIDNIGHT MAGIC",
         "orig_quote": '"The perfect night for a walk you\'ll regret by 2 AM. Stay hydrated."',
         "a": ("SÜDAÖINE MAAGIA", '"Täiuslik öö jalutuskäiguks, mida kahetsed kell kaks öösel. Joo vett."'),
@@ -190,22 +218,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     23: {
+        "trigger": "Kuiv jahe pime aeg / öö, 10–15°C, tuul kuni mõõdukas",
         "orig_name": "NIGHT CRAWLER",
         "orig_quote": '"Go out if you must, but consider the cost."',
-        "a": ("ÖINE ROOMAJAT", '"Mine välja, kui pead, aga arvesta tagajärgedega."'),
-        "b": ("PIME JA KÜLM", '"Väljas on jahe ja kõhe. Parem istu toas teetassi taga."'),
-        "c": ("HILINE HULKUR", '"Pime ja rõske. Kui helkurit pole, sõidab traktor üle ja keegi ei näegi."'),
+        "a": ("ÖÖROOMAJA", '"Mine välja, kui pead, aga arvesta tagajärgedega."'),
+        "b": ("PIME JA JAHE", '"Väljas on jahe ja kõhe. Parem istu toas teetassi taga."'),
+        "c": ("HILINE HULKUR", '"Pime ja jahe. Kui helkurit pole, sõidab traktor üle ja keegi ei näegi."'),
         "pick": "b",
     },
     24: {
+        "trigger": "EE: kuiv külm õhtu (18:00–23:59), <5°C, vaikne/nõrk tuul",
         "orig_name": "SUITSUSAUN",
         "orig_quote": '"Smoke sauna weather. Fire up the suitsusaun, then roll in the snow (or the pond) like a true local."',
         "a": ("SUITSUSAUN", '"Suitsusauna ilm. Pane saun kütte, siis visku lumme (või tiiki) nagu kohalik."'),
-        "b": ("SAUNAPÄEV", '"Õues on jahe, saun on kuum. Katsu ainult pärast tiiki hüppamist eluga kaldale saada."'),
+        "b": ("SAUNAPÄEV", '"Õues on külm, saun on kuum. Katsu ainult pärast tiiki hüppamist eluga kaldale saada."'),
         "c": ("PUHAS KULD", '"Suitsusaun köeb kaheksandat tundi. Pärast leili tiiki, õllekann kätte ja maailm on korras."'),
         "pick": "b",
     },
     25: {
+        "trigger": "Kuiv külm pime aeg / öö, 0.5–10°C, tuul kuni mõõdukas",
         "orig_name": "COCOA TIME",
         "orig_quote": '"Warm cup of chocolate and back to bed."',
         "a": ("KAKAOAEG", '"Soe tass kakaod ja tagasi voodisse."'),
@@ -214,6 +245,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     26: {
+        "trigger": "EE: kuiv pime pärastlõuna (14:00–17:59, päike juba loojunud), tuul kuni mõõdukas",
         "orig_name": "PIMEDUS",
         "orig_quote": '"Pimedus: the darkness. It\'s mid-afternoon and pitch black. Vitamin D is now a personality trait."',
         "a": ("PIMEDUS", '"Pimedus. Kell on kolm päeval ja kottpime. D-vitamiin on nüüd iseloomuomadus."'),
@@ -222,6 +254,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     27: {
+        "trigger": "Kuiv kuum hommik (06:00–09:59), ≥22°C, tuul kuni mõõdukas",
         "orig_name": "EARLY OVEN",
         "orig_quote": '"It\'s 8 AM and you are already sweating. Cancel all afternoon plans."',
         "a": ("VARAJANE AHI", '"Kell on 8 hommikul ja sa juba higistad. Tühista kõik pärastlõunased plaanid."'),
@@ -230,14 +263,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     28: {
+        "trigger": "Kuiv niiske hommik (06:00–09:59), 16–22°C, õhuniiskus >75%, vaikne/nõrk tuul",
         "orig_name": "MORNING SOUP",
         "orig_quote": '"You can chew the air this morning. Coffee won\'t save you."',
         "a": ("HOMMIKUSUPP", '"Täna hommikul saab õhku mäluda. Kohv sind ei päästa."'),
         "b": ("PAKS HOMMIK", '"Õhk on nii niiske ja lämbe, et hingamiseks peab vaeva nägema. Kohv teeb asja ainult hullemaks."'),
-        "c": ("LÄPPUV KESKHOMMIK", '"Õhk on paks nagu klimbisupp. Joo kohvi või ära joo, silm lahti ei tule."'),
+        "c": ("LÄMMATAV HOMMIK", '"Õhk on paks nagu klimbisupp. Joo kohvi või ära joo, silm lahti ei tule."'),
         "pick": "c",
     },
     29: {
+        "trigger": "Hommikune kerge vihm/tibutus (06:00–09:59, 6–18°C, ilma tugeva tuule ja uduta)",
         "orig_name": "THE OLYMPIC SPORT",
         "orig_quote": '"Getting a toddler into a car seat in this drizzle deserves a gold medal."',
         "a": ("OLÜMPIAALA", '"Väikelapse turvatooli saamine selle uduvihmaga väärib kuldmedalit."'),
@@ -246,6 +281,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     30: {
+        "trigger": "Kuiv külm hommik (06:00–09:59), ≤3°C (ilma päikeselise pakase või tugeva tuuleta)",
         "orig_name": "THE MORNING FROST",
         "orig_quote": '"The only thing colder than the air is the realization that you have to be productive."',
         "a": ("HOMMIKUNE HÄRMATIS", '"Ainuke asi, mis on õhust külmem, on teadmine, et pead olema produktiivne."'),
@@ -254,6 +290,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "a",
     },
     31: {
+        "trigger": "Kuiv karge hommik (06:00–09:59), 3–18°C, tuul kuni mõõdukas",
         "orig_name": "BRISK MORROW",
         "orig_quote": '"The air has a bite, but the coffee is hot. A productive day awaits."',
         "a": ("KÜLM HOMMIK", '"Õhk hammustab, aga kohv on kuum. Produktiivne päev ootab."'),
@@ -262,6 +299,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     32: {
+        "trigger": "EE: kuiv tuulevaikne soe niiske õhtu (17:00–22:59, 16–28°C, niiskus >70%)",
         "orig_name": "SÄÄSED",
         "orig_quote": '"The true apex predator of the Estonian forest has hatched. Long sleeves, DEET, and accept your fate."',
         "a": ("SÄÄSED", '"Metsa tõeline tippkiskja on koorunud. Pikad varrukad, sääsetõrje ja lepi oma saatusega."'),
@@ -270,6 +308,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "a",
     },
     33: {
+        "trigger": "Kuiv täpselt 20°C (19.8–20.2°C) ja tuulevaikus (ka iilideta)",
         "orig_name": "THE UNICORN",
         "orig_quote": '"Exactly 20 degrees and calm. Take a picture, it will be gone in 5 minutes."',
         "a": ("ÜKSSARVIK", '"Täpselt 20 kraadi ja tuulevaikus. Tee pilti, see kaob viie minutiga."'),
@@ -278,38 +317,43 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     34: {
+        "trigger": "Kuiv valge aeg (mitte hommik, 20–25°C) + tuulevaikus + niiskus >70%",
         "orig_name": "THE TERRARIUM",
         "orig_quote": '"Welcome to the enclosure. You are the iguana now."',
-        "a": ("TERAARIUM", '"Tere tulemast puuri. Sina oled nüüd iguaan."'),
+        "a": ("TERRAARIUM", '"Tere tulemast puuri. Sina oled nüüd iguaan."'),
         "b": ("KASVUHOONE", '"Soe ja niiske õhk seisab. Tunne on nagu loomaaia roomajatemajas."'),
-        "c": ("KILEMAJA", '"Õhk on nagu vanaema tomati-kasvuhoones keskpäeval. Tõmba uks lahti või lämbud ära."'),
+        "c": ("KILEMAJA", '"Õhk on nagu vanaema tomatikasvuhoones keskpäeval. Tõmba uks lahti või lämbud ära."'),
         "pick": "b",
     },
     35: {
+        "trigger": "Kuiv valge aeg (mitte hommik, 17–22°C) + kõrge niiskus (>80%) + vaikne/nõrk tuul",
         "orig_name": "THE MUGGY MIDDLE",
-        "orig_quote": '"Not hot, not cold, just aggressively moist. Good time to stay in and chill a Burgundy." ',
+        "orig_quote": '"Not hot, not cold, just aggressively moist. Good time to stay in and chill a Burgundy."',
         "a": ("LÄMBE VAHEPEALNE", '"Pole kuum, pole külm, lihtsalt agressiivselt niiske. Hea aeg toas püsida ja veini jahutada."'),
         "b": ("KLEEPUV HALLUS", '"Ei saja ega paista, aga kõik kleepub. Parem istuda toas klaasikese joogiga."'),
-        "c": ("RÕSKE LEITSUS", '"Pole soe ega külm, aga särk kleepub selga. Paras aeg toas istuda ja viriseda."'),
+        "c": ("RÕSKE LÄMBUS", '"Pole soe ega külm, aga särk kleepub selga. Paras aeg toas istuda ja viriseda."'),
         "pick": "b",
     },
     36: {
+        "trigger": "Mahe kerge tibutus (16–22°C, ≤1 mm/h) vaikse/nõrga tuulega (<3 m/s)",
         "orig_name": "SPITTING COBWEBS",
         "orig_quote": '"It\'s humid enough to ruin your hair, but not wet enough to justify an umbrella."',
-        "a": ("ÄMBLIKUVÕRGUDA", '"Piisavalt niiske, et rikkuda soeng, aga mitte piisavalt märg, et õigustada vihmavarju."'),
+        "a": ("ÄMBLIKUVÕRGU TIBUTUS", '"Piisavalt niiske, et rikkuda soeng, aga mitte piisavalt märg, et õigustada vihmavarju."'),
         "b": ("NIRU SADU", '"Soeng läheb krussi, aga vihmavarju avada oleks piinlik."'),
         "c": ("PORIVAIM", '"Vihma nagu ei saja, aga prillid on märjad ja juuksed ludus. Eestlane paneb kapuutsi pähe ja kannatab."'),
         "pick": "b",
     },
     37: {
+        "trigger": "Kuiv päev (17–25°C) + kõrge UV (>5.0) + mõõdukas tuul (breezy)",
         "orig_name": "SNEAKY SUNBURN",
         "orig_quote": '"The wind masks the heat. You will return looking like a boiled lobster."',
-        "a": ("SALALIK PÄIKESEPOLETUS", '"Tuul varjab kuumust. Tuleb tagasi ja näed välja nagu keedetud homaar."'),
+        "a": ("SALALIK PÄIKESEPÕLETUS", '"Tuul varjab kuumust. Tuled tagasi ja näed välja nagu keedetud homaar."'),
         "b": ("SALAKAVAL PÄIKE", '"Karge tuulega ei saa arugi, aga õhtuks oled punane nagu peet."'),
-        "c": ("KEEDETUD VÄHK", '"Külm tuul puhub, aga päike võtab. Õhtul oled punane nagu keeduvähk ja otsid külmkapist hapukoort."'),
+        "c": ("KEEDETUD VÄHK", '"Jahe tuul puhub, aga päike võtab. Õhtul oled punane nagu keeduvähk ja otsid külmkapist hapukoort."'),
         "pick": "b",
     },
     38: {
+        "trigger": "Kuiv mahe ilm (12–25°C) + petlikud puhangud (≥6.5 m/s või iilid ≥10.5 m/s)",
         "orig_name": "THE DECEPTIVE BREEZE",
         "orig_quote": '"Looks perfect from the window. Outside, your patio furniture is plotting an escape."',
         "a": ("PETLIK IIL", '"Aknast tundub täiuslik. Õues plaanib terrassimööbel põgenemist."'),
@@ -318,6 +362,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "a",
     },
     39: {
+        "trigger": "Kuiv mahe ilm (10–24°C) + ebakindel saju tõenäosus (35–64%) + vaikne/nõrk tuul",
         "orig_name": "SCHRÖDINGER'S SHOWER",
         "orig_quote": '"It might rain. It might not. Carry a jacket just to spite the atmosphere."',
         "a": ("SCHRÖDINGERI HOOG", '"Võib sadada. Võib mitte sadada. Kanna jopet puhtalt selleks, et atmosfäärile närvidele käia."'),
@@ -326,6 +371,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     40: {
+        "trigger": "Kuiv päev (16.5–20°C, pilvisus ≤75%) + ere päike (UV >5.0) + vaikne/nõrk tuul",
         "orig_name": "THE CRISP BAKE",
         "orig_quote": '"Air is cool, sun is a laser beam. The ultimate thermostat confusion."',
         "a": ("KARGE KÜPSETUS", '"Õhk on jahe, päike on laserikiir. Ülim termostaadi segadus."'),
@@ -334,6 +380,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     41: {
+        "trigger": "Kuiv ilm (5–25°C) + kõrge saju tõenäosus (≥65%) + tihe pilvisus (≥65%) või madal rõhk (≤1005 hPa)",
         "orig_name": "THE THREAT",
         "orig_quote": '"The sky is aggressively gray and looming, but doing absolutely nothing."',
         "a": ("ÄHVARDUS", '"Taevas on agressiivselt hall ja ähvardav, aga ei tee mitte midagi."'),
@@ -342,6 +389,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     42: {
+        "trigger": "Kuiv mahe ilm (10–25°C) + tormituul (11.5–15 m/s või iilid 16–21 m/s)",
         "orig_name": "THE INVISIBLE HAND",
         "orig_quote": '"Mother Nature is trying to physically shove you back indoors."',
         "a": ("NÄHTAMATU KÄSI", '"Emake Loodus üritab sind füüsiliselt tagasi tuppa lükata."'),
@@ -350,6 +398,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     43: {
+        "trigger": "Kuiv mahe ilm (10–25°C) + tugev tuul (8–11.5 m/s või iilid 12–16 m/s)",
         "orig_name": "BAD HAIR DAY",
         "orig_quote": '"Your hairgel has no power here."',
         "a": ("HALB SOENGUPÄEV", '"Sinu juuksegeelil pole siin mingit võimu."'),
@@ -358,22 +407,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     44: {
+        "trigger": "Kuiv päev (13–16.5°C, pilvisus ≤75%) + ere päike (UV >4.0) + vaikne/nõrk tuul",
         "orig_name": "FOOL'S SUMMER",
         "orig_quote": '"Looks like July, feels like October. Don\'t pack the coats away yet."',
         "a": ("NARRI SUVI", '"Näeb välja nagu juuli, tundub nagu oktoober. Ära mantleid veel ära paki."'),
-        "b": ("PETTUSSUVI", '"Päike paistab kenasti, aga tuul on jäine. Ära talvejopet veel keldrisse vii."'),
-        "c": ("PETUKAS", '"Paistab nagu juuli, aga puhub nagu oktoobris. Ära jopet kaugele pane, vanajumal teeb nalja."'),
+        "b": ("PETTUSSUVI", '"Päike paistab kenasti, aga õhk on jahe. Ära talvejopet veel keldrisse vii."'),
+        "c": ("PETUKAS", '"Paistab nagu juuli, aga tundub nagu oktoober. Ära jopet kaugele pane, vanajumal teeb nalja."'),
         "pick": "c",
     },
     45: {
+        "trigger": "Vihm/tibutus (6–22°C, mitte paduvihm) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
         "orig_name": "THE HORIZONTAL SHOWER",
         "orig_quote": '"Umbrellas are useless here. Embrace the suck."',
         "a": ("HORISONTAALNE DUŠŠ", '"Vihmavarjud on siin kasutud. Lepi olukorraga."'),
-        "b": ("KÜLILI SADU", '"Vihm sajab otse silma, mitte pähe. Vihmavari murdub pooleks."'),
-        "c": ("HORISONTAALNE PORI", '"Vihm tuleb otse küljelt. Vihmavari viska kohe prügikasti ja tõmba kapuuts lõua alla sõlme."'),
-        "pick": "a",
+        "b": ("KALDVIHM", '"Vihm sajab tuulega otse silma, mitte pähe. Vihmavari murdub pooleks."'),
+        "c": ("KÜLILI SADU", '"Vihm tuleb otse küljelt. Vihmavari viska kohe prügikasti ja tõmba kapuuts lõua alla sõlme."'),
+        "pick": "b",
     },
     46: {
+        "trigger": "Kuiv selge jahe päev (12–16.5°C, selge taevas, pilvisus ≤75%, UV ≤4.0) + tuulevaikus",
         "orig_name": "GARDEN WARRIOR",
         "orig_quote": '"Crisp, clear, and calm. Prime weather to test out a heavy-duty shredder on some branches."',
         "a": ("AIA SÕDUR", '"Karge, selge ja tuuletu. Parim ilm võimsa oksapurustaja katsetamiseks."'),
@@ -382,14 +434,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     47: {
+        "trigger": "Kuiv päikeseline jahe päev (8–17°C, pilvisus ≤75%, UV >3.5) + mõõdukas tuul (breezy)",
         "orig_name": "THE WIND CHILL",
         "orig_quote": '"The sun is trying its best, but the wind hates you."',
         "a": ("TUULEKÜLM", '"Päike annab endast parima, aga tuul vihkab sind."'),
-        "b": ("JÄINE TUUL", '"Päike särab taevas, aga jäine tuul ei anna armu."'),
+        "b": ("JÄINE TUUL", '"Päike särab taevas, aga jahe tuul ei anna armu."'),
         "c": ("TUULE VING", '"Päike püüab küll, aga tuul vihkab sind isiklikult. Pane sall ette või lõuad lõdisevad."'),
         "pick": "b",
     },
     48: {
+        "trigger": "Sombune nõrk tibutus (6–15°C, <0.5 mm/h, saju tõenäosus >70%, pilvisus ≥70%)",
         "orig_name": "PERPETUAL GLOOM",
         "orig_quote": '"It\'s barely raining, but your soul is still getting wet."',
         "a": ("IGAVENE SÜNGUS", '"Vaevalt sajab, aga su hing saab ikka märjaks."'),
@@ -398,6 +452,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     49: {
+        "trigger": "Kuiv täielik tuulevaikus (<1 m/s, iilideta), jahe (6–13°C), madal UV (≤3.0)",
         "orig_name": "THE VOID",
         "orig_quote": '"Absolutely nothing is happening out there. Perfect stasis."',
         "a": ("TÜHJUS", '"Õues ei toimu absoluutselt mitte midagi. Täielik tardumus."'),
@@ -406,14 +461,16 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     50: {
+        "trigger": "Soe kergem/mõõdukas vihm (≥22°C, ilma tugeva tuule, paduvihma või päikeseta)",
         "orig_name": "THE SPONGE",
         "orig_quote": '"Warm drizzle that instantly vaporizes and coats you in a fine layer of misery."',
         "a": ("KÄSN", '"Soe tibutus, mis aurustub kohe ja katab sind peene viletsuse kihiga."'),
-        "b": ("SOE UDUVIHM", '"Soe märg udu, mis teeb riided niiskeks ja tuju kleepuvaks."'),
-        "c": ("LÄPPUV NÖÖK", '"Soe uduvihm katab sind vastiku niiskuskihiga. Ega sa kuivaks ei jää, aga sooja ka ei saa."'),
+        "b": ("SOE UDUVIHM", '"Soe märg sadu, mis teeb riided niiskeks ja tuju kleepuvaks."'),
+        "c": ("LÄMMATAV NÖÖK", '"Soe uduvihm katab sind vastiku niiskuskihiga. Ega sa kuivaks ei jää, aga värskust ka ei saa."'),
         "pick": "b",
     },
     51: {
+        "trigger": "EE: kerge vihm / uduvihm (baasreegel, kui ükski tugevam saju- või liitreegel ei rakendu)",
         "orig_name": "UDUVIHM",
         "orig_quote": '"Uduvihm: literally \'fog-rain\'. Estonian has a word for it because it is always happening."',
         "a": ("UDUVIHM", '"Uduvihm: otsetõlkes \'udune vihm\'. Eestlastel on selleks sõna, sest seda juhtub pidevalt."'),
@@ -422,6 +479,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     52: {
+        "trigger": "Kuiv pilvine päev (16–22°C) + kuiv õhk (<50% niiskust) + vaikne/nõrk tuul",
         "orig_name": "THE MATTE FINISH",
         "orig_quote": '"No sun, no rain, dry air. The weather is buffering."',
         "a": ("MATT VIIMISTLUS", '"Pole päikest, pole vihma, kuiv õhk. Ilm puhverdab."'),
@@ -430,6 +488,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     53: {
+        "trigger": "Kuiv jahe päev (3–13°C, pilvisus ≤75%) + märgatav päike (UV >3.0) + vaikne/nõrk tuul",
         "orig_name": "THE FALSE SPRING",
         "orig_quote": '"Nature is gaslighting you. It looks warm, but the air will still bite."',
         "a": ("VALE KEVAD", '"Loodus manipuleerib sinuga. Tundub soe, aga õhk hammustab ikka."'),
@@ -438,6 +497,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     54: {
+        "trigger": "Kuiv ideaalne päev (21–25°C, saju tõenäosus <15%, pilvisus ≤75%, vaikne/nõrk tuul ≤2.5 m/s)",
         "orig_name": "THE GOLDILOCKS ZONE",
         "orig_quote": '"Are you not entertained?! Nature is putting on a masterclass."',
         "a": ("KULDVILLAKU TSOON", '"Kas te pole rahul?! Loodus pakub meistriklassi."'),
@@ -446,6 +506,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     55: {
+        "trigger": "Kuiv päev enne kella 15 (18–25°C, pilvisus ≤75%, saju tõenäosus <20%, vaikne/nõrk tuul)",
         "orig_name": "TERRACE ESPRESSO",
         "orig_quote": '"Ideal luminosity and gentle breeze. Step away from the monitor."',
         "a": ("TERRASSI ESPRESSO", '"Ideaalne valgus ja leebe tuuleiil. Astu monitori tagant eemale."'),
@@ -454,6 +515,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     56: {
+        "trigger": "Kuiv mahe-soe pärastlõuna/õhtu (18–25°C, pilvisus ≤75%, saju tõenäosus <20%, vaikne/nõrk tuul)",
         "orig_name": "BIG GREEN EGG TERRITORY",
         "orig_quote": '"Looks like meat\'s back on the menu, boys!"',
         "a": ("BIG GREEN EGG TERRITOORIUM", '"Paistab, et liha on jälle menüüs, poisid!"'),
@@ -462,6 +524,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     57: {
+        "trigger": "Kuiv ühtlaselt pilves päev (10–25°C, pilvisus >75% / lauspilves) + vaikne/nõrk tuul",
         "orig_name": "OVERCAST VELVET",
         "orig_quote": '"Zero glare, uniform diffuse lighting. Optimal hacking state."',
         "a": ("PILVINE SAMET", '"Null peegeldust, ühtlane hajutatud valgus. Optimaalne häkkimise olek."'),
@@ -470,6 +533,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     58: {
+        "trigger": "Kuiv mahe ilm (18–25°C) + sajurisk (≥20%) + vaikne/nõrk tuul",
         "orig_name": "THE PATIO GAMBLE",
         "orig_quote": '"Lovely right now, but the forecast has trust issues. Eat outside, but sit near the door."',
         "a": ("TERRASSI HASART", '"Praegu on tore, aga prognoosil on usaldusprobleemid. Söö õues, aga istu ukse lähedal."'),
@@ -478,6 +542,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     59: {
+        "trigger": "Kuiv mahe-soe ilm (14–25°C) + mõõdukas tuul (breezy)",
         "orig_name": "THE BRISK BREEZE",
         "orig_quote": '"Nice temperature, but the wind is trying to steal your napkins."',
         "a": ("KÄBE IIL", '"Kena temperatuur, aga tuul üritab su salvrätikuid varastada."'),
@@ -486,22 +551,25 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     60: {
+        "trigger": "Kuiv soe/kuum ilm (25–31°C, ilma niiskuse, kuivuse või tuuleta)",
         "orig_name": "THE ROASTING SPIT",
         "orig_quote": '"Hot enough to complain, not hot enough to melt. Stay in the shade."',
         "a": ("PÖÖRLEV VARRAS", '"Piisavalt kuum, et kaevata, mitte piisavalt, et sulada. Püsi varjus."'),
-        "b": ("MÕNUS LEITSUS", '"Kuumus hakkab juba ajudele käima, aga randa veel ei aja. Parem istu varjus."'),
+        "b": ("MÕNUS LEITSAK", '"Kuumus hakkab juba ajudele käima, aga randa veel ei aja. Parem istu varjus."'),
         "c": ("VIRISEMISE LEITSAK", '"Täpselt nii soe, et eestlane saab juba kuumuse üle vinguda, aga veel ei sula. Püsi heki varjus."'),
         "pick": "c",
     },
     61: {
+        "trigger": "Kuiv jahe-mahe baasilm (10–18°C)",
         "orig_name": "LAYERING SEASON",
         "orig_quote": '"A jacket is too much. No jacket is too little. Good luck."',
         "a": ("KIHILISUSE HOOAEG", '"Jope on liiga palju. Ilma jopeta on liiga vähe. Palju edu."'),
-        "b": ("JOPEDILEMMA", '"Jopega hakkab palav, fliisiga on külm. Vali ise, kumba pidi kannatad."'),
+        "b": ("KIHILINE RIIETUS", '"Jopega hakkab palav, fliisiga on külm. Vali ise, kumba pidi kannatad."'),
         "c": ("JOPEDILEMMA", '"Jopega higistad, pusaga külmud. Hommikul paned viis kihti selga, lõunaks tassid neid käe otsas."'),
         "pick": "c",
     },
     62: {
+        "trigger": "EE: kuiv jahe baasilm (3–10°C)",
         "orig_name": "THE ESTONIAN STANDARD",
         "orig_quote": '"Grey, chilly, and silent. Locally described as \'normal\', if anything is said at all."',
         "a": ("EESTI STANDARD", '"Hall, jahe ja vaikne. Kohapeal kirjeldatakse seda kui \'normaalne\', kui üldse midagi öeldakse."'),
@@ -510,6 +578,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     63: {
+        "trigger": "Kuiv külm baasilm (≤3°C)",
         "orig_name": "WINTER IS COMING",
         "orig_quote": '"The North remembers." Put on the thick woolen socks.',
         "a": ("TALV ON TULEKUL", '"\'Põhi mäletab.\' Pane paksud villased sokid jalga."'),
@@ -518,6 +587,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "c",
     },
     64: {
+        "trigger": "EE vaikimisi varureegel (kui ükski konkreetne reegel ei sobi)",
         "orig_name": "FORREST GUMP",
         "orig_quote": '"Estonian weather is like a box of Kalev chocolates."',
         "a": ("FORREST GUMP", '"Eesti ilm on nagu karp Kalevi šokolaadi."'),
@@ -526,6 +596,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     65: {
+        "trigger": "Jäätuv vihm / vihm ≤0.5°C juures ilma tugeva tuuleta (tuul kuni nõrk)",
         "orig_name": "BLACK ICE PROTOCOL",
         "orig_quote": '"Liquid rain at freezing point. Every sidewalk is now an audition for Olympic figure skating."',
         "a": ("KIILASJÄÄ", '"Vedel vihm miinuskraadiga. Kõnnitee on nüüd tasuta uisuväljak."'),
@@ -534,6 +605,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     66: {
+        "trigger": "Kuiv tihe udu ≤0°C või jäätuv udu (ilma marutuuleta)",
         "orig_name": "FROSTBOUND FOG",
         "orig_quote": '"Sub-zero pea soup. Every branch, windshield, and eyelash is slowly plating in rime ice."',
         "a": ("KÜLMUNUD UDU", '"Miinuskraadid ja paks udu. Iga oks ja autoklaas kattub aeglaselt härmatisega."'),
@@ -542,6 +614,7 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "pick": "b",
     },
     67: {
+        "trigger": "Külm rõske vihm/tibutus (0.5–6°C, mitte paduvihm ega tugev tuul)",
         "orig_name": "THE MARROW SOAK",
         "orig_quote": '"Too warm for snow, too cold to forgive. Raw rain that goes straight through wool and into your bones."',
         "a": ("LUUDENI MÄRG", '"Lume jaoks liiga soe, kuivaks jäämiseks liiga külm. Rõske vihm poeb otse kontidesse."'),
@@ -549,31 +622,441 @@ VIBES_EE: Dict[int, Dict[str, Any]] = {
         "c": ("LÖRTSIEELNE KÕLEDUS", '"Jääkülm vihm nulli piiril: lund ei tule, aga näpud on viie minutiga kanged ja kindad läbimärjad."'),
         "pick": "a",
     },
+    68: {
+        "trigger": "Äike + tugev/tormituul, paduvihm või rahe/lörts/lumi",
+        "orig_name": "SUPERCELL SQUALL",
+        "orig_quote": '"Lightning, lashing rain, and howling gusts all clocking in at once. Unplug everything and stay inside."',
+        "a": ("ÜLIRAKU RAJU", '"Välk, piitsutav vihm ja uluvad tuuleiilid korraga platsis. Tõmba kõik seinast välja ja püsi toas."'),
+        "b": ("ÄIKESERAJU", '"Taevas paugub, tuul peksab vihma aknasse ja puud on lookas. Täna ei käida isegi postkasti juures."'),
+        "c": ("TAEVA SÕJAKÄIK", '"Äike, padukas ja marutuul korraga. Tõmba ruuter seinast, pane küünlad ritta ja oota Elektrilevi rikkekaardi punaseks minemist."'),
+        "pick": "b",
+    },
+    69: {
+        "trigger": "Jäätuv vihm + mõõdukas või tugevam tuul (≥5 m/s või iilid ≥8.5 m/s)",
+        "orig_name": "ICE STORM",
+        "orig_quote": '"Freezing rain driven by wind. Every branch, wire, and sidewalk is turning into glass."',
+        "a": ("JÄÄTORM", '"Tuulega jäätuv vihm. Iga oks, elektriliin ja kõnnitee muutub klaasiks."'),
+        "b": ("JÄIDETORM", '"Tuul viskab jäävihma näkku ja külmutab iga oksa ning trepi sekunditega klaasiks. Ära isegi katsu ust."'),
+        "c": ("KLAASITORM", '"Tuuline jäävihm lakib puud, liinid ja kogu hoovi libedaks. Autouks külmub kinni enne, kui kaabitsa kätte saad."'),
+        "pick": "b",
+    },
+    70: {
+        "trigger": "Lumesadu + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "BLIZZARD",
+        "orig_quote": '"Sideways snow and zero horizon. Even the snowplows are reconsidering their life choices."',
+        "a": ("LUMETORM", '"Külili lumi ja null horisonti. Isegi lumesahad kaaluvad oma eluvalikuid ümber."'),
+        "b": ("LUMETUISK", '"Lumi tuiskab horisontaalselt silma ja tee kaob minutiga hangedesse. Isegi sahamees ohkab sügavalt."'),
+        "c": ("TUISUMÖLL", '"Päris lumetorm ja tuisk! Hang kasvab ukseni, bussid seisavad ja õige aeg on labidas esikusse tõsta."'),
+        "pick": "b",
+    },
+    71: {
+        "trigger": "Marutuul + vihm, või tormituul + tugev paduvihm",
+        "orig_name": "THE TEMPEST",
+        "orig_quote": '"Full gale-force wind hurling sheets of rain across the street. Battening down the hatches is no longer a metaphor."',
+        "a": ("MARUTORM", '"Täisjõus marutuul loobib vihmakardinaid üle tänava. Luukide kinninaelutamine pole enam metafoor."'),
+        "b": ("VIHMATORM", '"Marutuul ja paduvihm korraga. Aknaplekid kolisevad, puud ragisevad ja õues pole ühtegi kuiva kohta."'),
+        "c": ("MARURAJU", '"Täispakett: marutuul peksab paduvihma horisontaalselt vastu seina. Praamid seisavad ja naabri batuut läks Soome."'),
+        "pick": "b",
+    },
+    72: {
+        "trigger": "Kuiv marutuul (gale) + miinuskraadid (≤0.5°C) või karm tuulekülm (tuntav ≤-8°C)",
+        "orig_name": "ARCTIC GALE",
+        "orig_quote": '"Sub-zero air moving at hurricane ambition. Exposed skin has roughly ninety seconds."',
+        "a": ("ARKTILINE MARU", '"Miinuskraadides õhk orkaani ambitsiooniga. Katmata nahal on umbes üheksakümmend sekundit."'),
+        "b": ("JÄINE MARU", '"Külmutav marutuul lõikab nagu žilett. Põsed lähevad valgeks enne, kui väravast välja jõuad."'),
+        "c": ("PÕHJANABA RAJU", '"Pakane ja marutuul käsikäes. Ainult jääkaru ja kõige kangem talisupleja pistavad nina välja."'),
+        "pick": "b",
+    },
+    73: {
+        "trigger": "Lörts või vihma ja lume segu + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "WINTRY GALE",
+        "orig_quote": '"Wind-whipped sleet stinging like wet gravel. Peak atmospheric hostility."',
+        "a": ("TALVINE MARU", '"Tuulega piitsutatud lörts torgib nagu märg kruus. Atmosfääri vaenulikkuse tipp."'),
+        "b": ("LÖRTSITUISK", '"Tuul peksab märga lörtsi otse näkku nagu jäist kruusa. Isegi koer keeldub uksest välja astumast."'),
+        "c": ("LÖRTSIRAJU", '"Külili märg lörts ja kõle maru – täpselt see põhjus, miks eestlane räägib novembrist sosinal."'),
+        "pick": "b",
+    },
+    74: {
+        "trigger": "Lörts või vihma ja lume segu ilma tugeva tuuleta",
+        "orig_name": "SLUSH SEASON",
+        "orig_quote": '"Rain and snow arguing over which one gets to ruin your shoes first. Both are winning."',
+        "a": ("LÖRTSIHOOAEG", '"Vihm ja lumi vaidlevad, kumb su saapad esimesena ära rikub. Mõlemad võidavad."'),
+        "b": ("MÄRG LÖRTS", '"Taevast sajab külma suppi, tänavad on hall puder ja saapad lirtsuvad kolme minutiga."'),
+        "c": ("LÖRTSISUPP", '"Pole õige vihm ega õige lumi, vaid külm hall puder. Eesti aastaajad number kuus kuni üheksa."'),
+        "pick": "c",
+    },
+    75: {
+        "trigger": "Soe vihm (≥22°C) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "TROPICAL SQUALL",
+        "orig_quote": '"Warm rain blasted sideways by storm gusts. A summer squall that ignores every umbrella."',
+        "a": ("TROOPILINE PAGI", '"Soe vihm puhutakse tormi-iilidega külili. Suvine pagi, mis ei hooli ühestki vihmavarjust."'),
+        "b": ("SUVERAJU", '"Soe paduvihm tuleb tuulega küljelt sisse. Vihmavari lendab pahupidi, aga vähemalt ei külmu ära."'),
+        "c": ("SOE PAGI", '"Soe tuulevihm lööb terrassitoolid pikali ja ajab grillmeistri kiirelt katuse alla."'),
+        "pick": "b",
+    },
+    76: {
+        "trigger": "Tugev paduvihm + mõõdukas või tugevam tuul (≥5 m/s või iilid ≥8.5 m/s, mitte külm kaldvihm ega troopiline pagi)",
+        "orig_name": "STORMY DOWNPOUR",
+        "orig_quote": '"Sheets of heavy rain angled by brisk gusts. Drains are losing and coats are surrendering."',
+        "a": ("TORMINE PADUVIHM", '"Tugevad vihmakardinad kaldu puhangulises tuules. Kaevud jäävad alla ja mantlid annavad alla."'),
+        "b": ("TORMINE PADUKAS", '"Vihma kallab viltu nagu pangest ja tuul lõõtsub juurde. Tänavad ujuvad ja jope annab alla."'),
+        "c": ("PADURAJU", '"Kallab viltu nagu oavarrest ja tuul peksab peale. Tänavanurgal ujub juba väike järv."'),
+        "pick": "b",
+    },
+    77: {
+        "trigger": "Külm vihm (0.5–6°C) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "NORTH SEA LASHING",
+        "orig_quote": '"Near-freezing rain fired horizontally into your face. Too warm for snow, far too violent for mercy."',
+        "a": ("PÕHJAMERE PIITS", '"Nullilähedane vihm tulistatakse horisontaalselt näkku. Lume jaoks liiga soe, halastuseks liiga jõhker."'),
+        "b": ("JÄINE KALDVIHM", '"Jääkülm vihm peksab tuulega otse näkku. Lumi oleks sellest sada korda leebem."'),
+        "c": ("LÄÄNEMERE PIITS", '"Kaks kraadi sooja, marutuul ja külm vihm otse silma. Klassikaline rannikuilm, mis kasvatab iseloomu."'),
+        "pick": "b",
+    },
+    78: {
+        "trigger": "Tihe udu (<1000 m) + vihm",
+        "orig_name": "FOGBOUND RAIN",
+        "orig_quote": '"Dense fog soaked with falling rain. Zero visibility, 100% damp, pure maritime limbo."',
+        "a": ("UDUSADU", '"Tihe udu läbi imbunud langevast vihmast. Null nähtavust, sada protsenti niiskust, puhas mereline eikellegimaa."'),
+        "b": ("HALL UDUSADU", '"Tihe udu ja vihm ühes paketis. Midagi ei näe, kõik tilgub ja maailm lõpeb aia taga."'),
+        "c": ("PIIMJAS VIHM", '"Udu on nii paks, et vihmapiiskadel pole kuhugi kukkuda. Tõmba kardinad ette ja pane ahi kütte."'),
+        "pick": "b",
+    },
+    79: {
+        "trigger": "Kuiv tihe udu (>0°C, mitte jäätuv udu) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "SEA FOG DRIFT",
+        "orig_quote": '"Thick fog racing past on strong gusts. Like standing inside a fast-moving cloud."',
+        "a": ("MEREUDU TRIIV", '"Paks udu kihutab tugevate iilidega mööda. Nagu seisaks kiiresti liikuva pilve sees."'),
+        "b": ("TUULINE MEREUDU", '"Paks udu kihutab tuulega mööda tänavaid. Nagu elaks otse madala pilve sees."'),
+        "c": ("RAJUUDU", '"Udu ei seisa paigal, vaid tormab merelt peale nagu kiirrong. Rannikult sisemaani valge sein."'),
+        "pick": "b",
+    },
+    80: {
+        "trigger": "Kuiv vaikne/nõrk tuul + halb õhukvaliteet (AQI ≥4 või kõrge PM, väljaspool äärmuslikku kuumust/pakast) + inversioon/udu/vine/rõhk",
+        "orig_name": "SMOG TRAP",
+        "orig_quote": '"Still air trapping particulates under a low lid. Keep the windows shut and skip the outdoor run."',
+        "a": ("SUDULÕKS", '"Seisev õhk hoiab tahked osakesed madala kaane all. Hoia aknad kinni ja jäta õues jooksmine vahele."'),
+        "b": ("SUDUNE SEISAK", '"Õhk seisab ja peentolm ripub madalal. Hoia aknad kinni ning jäta õuetrenn vahele."'),
+        "c": ("SUDUKAAN", '"Tuulevaikus ja paks ving madala pilvekaane all. Hoia tuulutus kinni ja tee trenn täna toas."'),
+        "pick": "b",
+    },
+    81: {
+        "trigger": "Päevane kerge/mõõdukas vihm (≥6°C, pilvisus ≤70%, mitte lauspilves) + päike (UV ≥3 või pilvisus ≤55%)",
+        "orig_name": "SUNSHOWER",
+        "orig_quote": '"Bright sunshine and falling raindrops at the same time. Look opposite the sun for the rainbow."',
+        "a": ("PÄIKESELINE HOOVIHM", '"Ere päikesepaiste ja langevad vihmapiisad samal ajal. Vaata päikesele vastassuunda vikerkaare järele."'),
+        "b": ("VIKERKAAREILM", '"Päike särab ja vihm sabistab korraga. Hea põhjus korraks taevasse vaadata."'),
+        "c": ("VANAKURI VIHTLEB", '"Päike paistab, vihma sajab – vanarahva järgi vihtleb vanakuri ja rebasel on pulmad. Otsi vikerkaart!"'),
+        "pick": "c",
+    },
+    82: {
+        "trigger": "Nõrk vihm/tibutus (≥6°C) + uduvine (<3000 m)",
+        "orig_name": "MISTY DRIZZLE",
+        "orig_quote": '"Hanging mist blurring into fine drizzle. Not quite rain, not quite fog—just damp air."',
+        "a": ("UDUVINE JA TIBUTUS", '"Rippuv uduvine sulandub peeneks tibutuseks. Pole päris vihm ega päris udu – lihtsalt niiske õhk."'),
+        "b": ("NIISKE VINE", '"Uduvine ja tibutus sulavad üheks halliks pilveks. Prillid on udused ja juuksed niisked."'),
+        "c": ("RÕSKE VINE", '"Pole õige udu ega õige vihm, vaid ühtlane märg uduvine. Jope peal säravad tillukesed piisad."'),
+        "pick": "b",
+    },
+    83: {
+        "trigger": "Kuiv tihe udu jahe-külmas õhus (0–5°C, ilma tugeva tuuleta)",
+        "orig_name": "CHILL FOG",
+        "orig_quote": '"Raw, bone-damp fog hovering just above freezing. Quiet, clammy, and unforgiving."',
+        "a": ("KÜLM UDU", '"Kõle ja luudeni niiske udu napilt üle nulli. Vaikne, rõske ja halastamatu."'),
+        "b": ("RÕSKE UDU", '"Napilt üle nulli ja paks külm udu. Nähtavust pole ja külm niiskus poeb krae vahele."'),
+        "c": ("KÕLE PIIMASUPP", '"Paar kraadi sooja ja läbipaistmatu külm udu. Tuba, soe tee ja villased sokid võidavad."'),
+        "pick": "b",
+    },
+    84: {
+        "trigger": "Praegu kuiv ja tiheda uduta (tuul alla tugeva, väljaspool äärmuslikku kuumust/pakast), aga 3–6 h prognoosis torm/paduvihm/äike või madal rõhk (≤1000 hPa)",
+        "orig_name": "STORM BREWING",
+        "orig_quote": '"Eerily dry for now, but the barometer and radar are flashing red. Bring everything indoors."',
+        "a": ("TORM KOGUNEB", '"Praegu kõhedalt kuiv, aga baromeeter ja radar vilguvad punaselt. Too kõik asjad tuppa."'),
+        "b": ("VAIKUS ENNE TORMI", '"Praegu on veel kuiv, aga õhurõhk kukub ja radar punetab. Korja pesu nöörilt ja pane aknad kinni."'),
+        "c": ("BAROMEETRI HÄIRE", '"Praegu petlikult vaikne, aga torm on juba ukse taga. Seo batuut kinni, enne kui hilja on."'),
+        "pick": "b",
+    },
+    85: {
+        "trigger": "Kuiv kuum pime aeg / öö (>25°C, ilma üle 75% niiskuseta)",
+        "orig_name": "TROPICAL NIGHT",
+        "orig_quote": '"Past sunset and still over 25 degrees. The walls are radiating back everything they absorbed all day."',
+        "a": ("TROOPILINE ÖÖ", '"Päike ammu loojunud, aga ikka üle 25 kraadi. Seinad kiirgavad tagasi kõik päevase kuumuse."'),
+        "b": ("KUUM ÖÖ", '"Südaööl on endiselt üle 25 kraadi. Aken lahti ei jahuta ja magamine jääb homseks."'),
+        "c": ("LEITSAKUÖÖ", '"Päike läks magama, aga kuumus unustas lahkuda. Pöörad patja ühelt küljelt teisele kuni koiduni."'),
+        "pick": "a",
+    },
+    86: {
+        "trigger": "Kuiv sügav pakane (≤-3°C või ≤1°C tuntavaga ≤-6°C) + tugev/tormituul (≥8 m/s või iilid ≥12 m/s)",
+        "orig_name": "ARCTIC WINDCHILL",
+        "orig_quote": '"Deep sub-zero air sharpened by howling wind. Every exposed square inch is filing a complaint."',
+        "a": ("ARKTILINE TUULEKÜLM", '"Sügav miinus teravdatud uluva tuulega. Iga katmata nahalapike esitab kaebuse."'),
+        "b": ("PAKASETUUL", '"Kõva pakane ja vali tuul korraga. Nägu kangestub minutiga ja sall peab ulatuma silmadeni."'),
+        "c": ("SIBERI TERVITUS", '"Miinuskraadid ja lõikav tuul koos – kõrvad helisevad ja ninakarvad külmuvad hetkega."'),
+        "pick": "b",
+    },
+    87: {
+        "trigger": "Kuiv külm õhk (0.5–7°C) + kõrge niiskus (≥85% või kastepunktivahe ≤2°C) + tugev/tormituul",
+        "orig_name": "RAW DAMP GALE",
+        "orig_quote": '"Saturated coastal cold driven straight through your layers by strong gusts."',
+        "a": ("RÕSKE TUULEMARU", '"Niiskusest küllastunud rannikukülm, mida tugevad iilid otse läbi riiete puhuvad."'),
+        "b": ("RÕSKE TUULEKÜLM", '"Külm, niiske ja tuuline korraga. Läheb ka läbi paksu jope otse kontidesse."'),
+        "c": ("LUUDENI KÕLEDUS", '"Kaks kraadi, niiske mereõhk ja lõikav tuul. Just selline ilm, mille vastu aitab ainult kuum saun."'),
+        "pick": "b",
+    },
+    88: {
+        "trigger": "Kuiv päevane pakane (≤0.5°C) + selge/päikeseline taevas (pilvisus ≤35%) + vaikne/nõrk tuul",
+        "orig_name": "BLUEBIRD FREEZE",
+        "orig_quote": '"Crystal-clear sky, sparkling frost, and crisp sub-zero calm. Cold, yes—but dazzling."',
+        "a": ("SELGE PAKANE", '"Kristallselge taevas, sätendav härmatis ja karge tuulevaikus. Külm küll, aga pimestavalt ilus."'),
+        "b": ("KARGE PÄIKESEPAKANE", '"Miinuskraadid, särav päike ja vaikne õhk. Postkaarditalv, kus põsed lähevad mõnusalt punaseks."'),
+        "c": ("POSTKAARDIPAKANE", '"Selge sinine taevas, krudisev külm ja null tuult. Isegi morn eestlane muigab korraks."'),
+        "pick": "b",
+    },
+    89: {
+        "trigger": "Kuiv pime/selge öö (pilvisus ≤40%) + pakane/külm (≤1°C) + vaikne/nõrk tuul",
+        "orig_name": "STARRY FREEZE",
+        "orig_quote": '"Clear dark sky radiating heat straight into space. Quiet, crisp, and frosting over fast."',
+        "a": ("TÄHEPAKANE", '"Selge pime taevas kiirgab soojuse otse kosmosesse. Vaikne, karge ja jäätub kiiresti."'),
+        "b": ("VAIKNE PAKASEÖÖ", '"Tähed säravad, õhk on vaikne ja maa tõmbub kiiresti härma. Hommikul saab autoklaasi kraapida."'),
+        "c": ("SELGE PAKASEÖÖ", '"Täistaevas särab ja pakane paugub vaikselt. Ahi prõksub toas ja hingeaur seisab õhus."'),
+        "pick": "b",
+    },
+    90: {
+        "trigger": "Kuiv valge aeg (25–31°C) + madal õhuniiskus (<35%) + mõõdukas või tugevam tuul",
+        "orig_name": "HOT DRY WIND",
+        "orig_quote": '"Like standing directly in front of a giant hair dryer. Hot, bone-dry gusts pulling moisture out of everything."',
+        "a": ("KUUM KUIV TUUL", '"Nagu seisaks otse hiiglasliku fööni ees. Kuumad, luukuivad iilid tõmbavad igalt poolt niiskuse välja."'),
+        "b": ("FÖÖNITUUL", '"Kuum ja kuiv tuul puhub näkku nagu juukseföön. Huulepalsam ja veepudel on hädavajalikud."'),
+        "c": ("KÕRBETUUL", '"Tuul ei jahuta üldse, vaid kuivatab sind nagu rosinaid ahjus. Kartulipealsed kolletavad juba."'),
+        "pick": "b",
+    },
+    91: {
+        "trigger": "Kuiv valge aeg (25–31°C, niiskus ≥35%) + mõõdukas või tugevam tuul",
+        "orig_name": "BREEZY HEAT",
+        "orig_quote": '"Hot sun tempered by a steady warm wind. Find some shade and let the breeze do the heavy lifting."',
+        "a": ("TUULINE KUUMUS", '"Kuum päike, mida leevendab ühtlane soe tuul. Leia vari ja lase briisil raske töö ära teha."'),
+        "b": ("SOE SUVETUUL", '"Kuum päev, aga mõnus tuul hoiab õhu liikvel. Püsi varjus ja naudi haruldast rannailma."'),
+        "c": ("RANNAILMA BRIIS", '"Üle 25 kraadi ja tuul jahutab täpselt parajalt. Pool riiki on juba liivarannas või järve ääres."'),
+        "pick": "b",
+    },
 }
 
 _BY_ORIG_NAME: Dict[str, Dict[str, Any]] = {
     v["orig_name"]: v for v in VIBES_EE.values()
 }
 
-def get_ee_vibe(vibe_name: str) -> Tuple[str, str]:
+
+def get_ee_vibe(vibe_name: str, default_quote: str = "") -> Tuple[str, str]:
     """Returns (translated_name, translated_quote) for the given vibe according to active pick."""
     entry = _BY_ORIG_NAME.get(vibe_name)
     if not entry:
-        return vibe_name, ""
+        return vibe_name, default_quote
     pick = entry.get("pick", "c").lower()
     t_name, t_quote = entry.get(pick, entry["a"])
     return t_name, t_quote
 
 
-# Weather description mappings from OpenWeatherMap to Estonian
+# =====================================================================
+# ESTONIAN LABELS FOR FACTORS, SYNERGIES & FORECAST STEP CONDITIONS
+# =====================================================================
+
+FACTOR_LABELS_ET: Dict[str, str] = {
+    "thunder": "Äike",
+    "freezing": "Jäätumine",
+    "snow": "Lumi",
+    "sleet": "Lörts",
+    "rain": "Vihm",
+    "wind": "Tuul",
+    "fog": "Udu",
+    "mist": "Uduvine",
+    "cold": "Külm",
+    "heat": "Kuumus",
+    "humidity": "Niiskus",
+    "dry": "Kuivus",
+    "uv": "UV",
+    "sun": "Päike",
+    "clouds": "Pilved",
+    "night": "Öö",
+    "morning": "Hommik",
+    "air": "Õhukvaliteet",
+    "front": "Ilmarinne",
+}
+
+SYNERGY_LABELS_ET: Dict[str, str] = {
+    # Band A — Severe compound & extreme hazards
+    "thunder_squall": "Äikeseraju",
+    "ice_storm": "Jäidetorm",
+    "blizzard": "Lumetorm",
+    "wet_gale": "Vihmatorm",
+    "arctic_gale": "Arktiline maru",
+    "wintry_gale": "Lörtsituisk",
+    "freezing_fog": "Jäätuv udu",
+    "thunderstorm": "Äike",
+    "freezing_rain": "Jäätuv vihm",
+    "gale": "Marutuul",
+    "mixed_precip": "Lörtsisadu",
+    "snowfall": "Lumesadu",
+    # Band B — Active precip & visibility compounds + pure states
+    "tropical_squall": "Soe tormihoog",
+    "stormy_rain": "Tormine paduvihm",
+    "libeccio": "Tugev edelatuul",
+    "cold_lashing_rain": "Külm kaldvihm",
+    "horizontal_rain": "Kaldvihm",
+    "foggy_rain": "Udune vihm",
+    "windy_fog": "Tuuline udu",
+    "smog_inversion": "Seisev sudu",
+    "warm_fog": "Soe niiske udu",
+    "sunshower": "Päikeseline hoovihm",
+    "warm_downpour": "Soe paduvihm",
+    "cold_rain": "Külm rõske vihm",
+    "misty_drizzle": "Uduvine ja tibutus",
+    "warm_drizzle": "Soe niiske vihm",
+    "mild_rain": "Mahe vihm",
+    "cold_fog": "Külm tihe udu",
+    "heavy_rain": "Tugev vihm",
+    "moderate_rain": "Mõõdukas vihm",
+    "dense_fog": "Tihe udu",
+    "gloomy_drizzle": "Sombune tibutus",
+    "calm_drizzle": "Vaikne peenvihm",
+    "morning_rain": "Hommikune vihm",
+    "light_drizzle": "Kerge uduvihm",
+    # Band C — Dry atmospheric synergies
+    "storm_approaching": "Lähenev torm",
+    "scorching_humid": "Rõhuv lämbe kuumus",
+    "scirocco": "Soe niiske kagutuul",
+    "muggy_night": "Lämbe öö",
+    "tropical_night": "Troopiline öö",
+    "tramontana": "Külm mägituul",
+    "freezing_night_wind": "Pakasene öötuul",
+    "arctic_windchill": "Arktiline tuulekülm",
+    "damp_windchill": "Rõske tuulekülm",
+    "bitter_wind": "Lõikav külm tuul",
+    "sunny_frost": "Päikeseline pakane",
+    "starry_frost": "Selge pakaseöö",
+    "bitter_cold": "Kõva pakane",
+    "damp_cold": "Rõske külm",
+    "hot_dry_wind": "Kuum kuiv tuul",
+    "extreme_heat": "Äärmuslik kuumus",
+    "arid_heat": "Kuiv seisev kuumus",
+    "muggy_heat": "Seisev lämbe kuumus",
+    "breezy_heat": "Tuuline kuumus",
+    "high_uv_heat": "Tugev UV-kuumus",
+    "storm_wind": "Kuiv tormituul",
+    "strong_wind": "Tugev kuiv tuul",
+    "windy_uv": "Tuuline kõrge UV",
+    "sunny_windchill": "Päikeseline tuulekülm",
+    "gusty_breeze": "Petlikud tuuleiilid",
+    "looming_rain": "Ähvardavad sajupilved",
+    "humid_evening": "Vaikne niiske õhtu",
+    "white_night": "Valge öö",
+    "still_humid": "Vaikne niiske soojus",
+    "muggy_mild": "Lämbe mahe õhk",
+    "cool_high_uv": "Jahe õhk, ere päike",
+    "sunny_cool": "Päikeseline jahedus",
+    "uncertain_showers": "Hoovihma võimalus",
+    # Band D & E — Diurnal, pleasant & breezy moods
+    "warm_morning": "Kuum hommik",
+    "humid_morning": "Niiske hommik",
+    "frost_morning": "Härmas hommik",
+    "crisp_morning": "Karge hommik",
+    "winter_darkness": "Pime pärastlõuna",
+    "crisp_sauna_evening": "Karge külm õhtu",
+    "pleasant_night": "Mõnus kuiv õhtu",
+    "mild_night": "Mahe kuiv öö",
+    "cool_night": "Jahe öö",
+    "chilly_night": "Kõle öö",
+    "perfect_calm": "Vaikne 20 °C tasakaal",
+    "golden_evening": "Soe vaikne õhtu",
+    "ideal_warmth": "Ideaalne vaikne soojus",
+    "crisp_clear": "Karge selge vaikus",
+    "bright_chilly": "Päikeseline jahe õhk",
+    "dry_cloudy": "Kuiv mahe pilvisus",
+    "bright_mild": "Ere mahe soojus",
+    "calm_mild": "Kuiv vaikne soojus",
+    "uncertain_patio": "Mahe, sajuohuga",
+    "dead_calm": "Jahe tuulevaikus",
+    "soft_overcast": "Ühtlane kuiv pilvisus",
+    "brisk_breeze": "Käbe soe tuul",
+    "hot_still": "Seisev kuumus",
+}
+
+STEP_KIND_LABELS_ET: Dict[str, str] = {
+    "thunder_squall": "Äikeseraju",
+    "thunderstorm": "Äike",
+    "ice_storm": "Jäidetorm",
+    "freezing_rain": "Jäätuv vihm",
+    "blizzard": "Lumetorm",
+    "wintry_gale": "Lörtsituisk",
+    "wet_gale": "Vihmatorm",
+    "arctic_gale": "Arktiline maru",
+    "freezing_fog": "Jäätuv udu",
+    "stormy_rain": "Tormine vihm",
+    "cold_lashing_rain": "Külm kaldvihm",
+    "foggy_rain": "Udune vihm",
+    "windy_fog": "Tuuline udu",
+    "mixed_precip": "Lörtsisadu",
+    "cold_rain": "Külm vihm",
+    "misty_drizzle": "Uduvine ja tibutus",
+    "bitter_wind": "Lõikav tuul",
+    "gale": "Marutuul",
+    "heavy_rain": "Tugev vihm",
+    "heavy_snow": "Tugev lumesadu",
+    "dense_fog": "Tihe udu",
+    "bitter_cold": "Karm külm",
+    "hot_dry_wind": "Kuum kuiv tuul",
+    "muggy_heat": "Lämbe kuumus",
+    "extreme_heat": "Äärmuslik kuumus",
+    "rain": "Vihm",
+    "snow": "Lumi",
+    "windy": "Tugev tuul",
+    "calm": "Rahulik",
+}
+
+
+def translate_factor_et(factor: str) -> str:
+    """Translate a canonical atmospheric factor token into Estonian."""
+    key = factor.strip().lower()
+    if not key:
+        return ""
+    return FACTOR_LABELS_ET.get(key, key.replace("_", " ").capitalize())
+
+
+def translate_synergy_et(synergy_key: str, fallback: str = "") -> str:
+    """Translate a VibeRule synergy key into Estonian, falling back cleanly."""
+    key = synergy_key.strip().lower()
+    if key in SYNERGY_LABELS_ET:
+        return SYNERGY_LABELS_ET[key]
+    if fallback:
+        return fallback
+    return key.replace("_", " ").capitalize() if key else ""
+
+
+def translate_step_kind_et(kind: str, fallback: str = "") -> str:
+    """Translate a ForecastStep StepCondition kind into Estonian, falling back cleanly."""
+    key = kind.strip().lower()
+    if key in STEP_KIND_LABELS_ET:
+        return STEP_KIND_LABELS_ET[key]
+    if key in SYNERGY_LABELS_ET:
+        return SYNERGY_LABELS_ET[key]
+    if fallback:
+        return fallback
+    return key.replace("_", " ").capitalize() if key else ""
+
+
+# =====================================================================
+# WEATHER DESCRIPTION MAPPINGS (OpenWeatherMap -> Estonian)
+# =====================================================================
+
 WEATHER_DESC_ET: Dict[str, str] = {
     "clear sky": "selge taevas",
     "few clouds": "vähene pilvisus",
     "scattered clouds": "vahelduv pilvisus",
     "broken clouds": "poolpilves",
     "overcast clouds": "pilves",
+    "partly cloudy": "vahelduv pilvisus",
+    "mostly cloudy": "valdavalt pilves",
     "light rain": "kerge vihm",
     "moderate rain": "mõõdukas vihm",
+    "heavy rain": "tugev vihm",
     "heavy intensity rain": "tugev vihm",
     "very heavy rain": "väga tugev vihm",
     "extreme rain": "paduvihm",
@@ -583,11 +1066,16 @@ WEATHER_DESC_ET: Dict[str, str] = {
     "light intensity shower rain": "kerge hoovihm",
     "shower rain": "hoovihm",
     "heavy intensity shower rain": "tugev hoovihm",
-    "ragged shower rain": "hooline vihm",
+    "ragged shower rain": "katkendlik hoovihm",
+    "proximity shower rain": "lähenev hoovihm",
     "light snow": "kerge lumi",
     "snow": "lumi",
     "heavy snow": "tugev lumesadu",
+    "blowing snow": "tuisk",
+    "drifting snow": "pinnatuisk",
     "sleet": "lörts",
+    "light sleet": "kerge lörts",
+    "heavy sleet": "tugev lörts",
     "light shower sleet": "kerge lörtsihoog",
     "shower sleet": "lörtsihoog",
     "light rain and snow": "kerge vihm ja lumi",
@@ -595,10 +1083,13 @@ WEATHER_DESC_ET: Dict[str, str] = {
     "light shower snow": "kerge lumehoog",
     "shower snow": "lumehoog",
     "heavy shower snow": "tugev lumehoog",
+    "hail": "rahe",
+    "ice pellets": "jääterad",
     "mist": "udu / vine",
     "smoke": "suits",
     "haze": "vine",
     "sand/dust whirls": "tolmukeerised",
+    "sand/ dust whirls": "tolmukeerised",
     "fog": "udu",
     "sand": "liiv",
     "dust": "tolm",
@@ -610,12 +1101,20 @@ WEATHER_DESC_ET: Dict[str, str] = {
     "rain": "vihm",
     "thunderstorm": "äike",
     "drizzle": "uduvihm",
+    "light drizzle": "kerge uduvihm",
     "thunderstorm with light rain": "äike kerge vihmaga",
     "thunderstorm with rain": "äikesevihm",
     "thunderstorm with heavy rain": "tugev äikesevihm",
+    "thunderstorm with heavy shower rain": "tugev äikese-hoovihm",
+    "thunderstorm with hail": "äike rahega",
+    "thunderstorm with light hail": "äike kerge rahega",
+    "thunderstorm with heavy hail": "äike tugeva rahega",
     "light thunderstorm": "kerge äike",
     "heavy thunderstorm": "tugev äike",
+    "heavy thunderstorm with rain": "tugev äikesevihm",
+    "heavy thunderstorm with heavy rain": "tugev äikesevihm",
     "ragged thunderstorm": "äikesetorm",
+    "proximity thunderstorm": "lähenev äike",
     "thunderstorm with light drizzle": "äike kerge uduvihmaga",
     "thunderstorm with drizzle": "äike uduvihmaga",
     "thunderstorm with heavy drizzle": "äike tugeva uduvihmaga",
@@ -627,15 +1126,39 @@ WEATHER_DESC_ET: Dict[str, str] = {
     "shower rain and drizzle": "hoovihm ja uduvihm",
     "heavy shower rain and drizzle": "tugev hoovihm ja uduvihm",
     "shower drizzle": "uduvihmahood",
+    "unknown": "teadmata",
 }
+
+# Longest-key-first order prevents generic tokens ('rain', 'sand', 'snow') from
+# hijacking compound OWM descriptions during fallback partial matching.
+_WEATHER_DESC_SORTED: Tuple[Tuple[str, str], ...] = tuple(
+    sorted(WEATHER_DESC_ET.items(), key=lambda kv: len(kv[0]), reverse=True)
+)
+_THUNDER_DESC_SORTED: Tuple[Tuple[str, str], ...] = tuple(
+    kv for kv in _WEATHER_DESC_SORTED if "thunder" in kv[0]
+)
+_FREEZING_DESC_SORTED: Tuple[Tuple[str, str], ...] = tuple(
+    kv for kv in _WEATHER_DESC_SORTED if "freezing" in kv[0]
+)
+
 
 def translate_weather_desc(desc: str) -> str:
     """Translates common weather descriptions to Estonian, falling back to original title-cased."""
     raw = desc.lower().strip()
+    if not raw:
+        return ""
     if raw in WEATHER_DESC_ET:
         return WEATHER_DESC_ET[raw].capitalize()
-    # Partial match check
-    for en_k, et_v in WEATHER_DESC_ET.items():
+    # Preserve high-severity hazard tokens before general longest-match fallback
+    if "thunder" in raw:
+        for en_k, et_v in _THUNDER_DESC_SORTED:
+            if en_k in raw:
+                return et_v.capitalize()
+    if "freezing" in raw:
+        for en_k, et_v in _FREEZING_DESC_SORTED:
+            if en_k in raw:
+                return et_v.capitalize()
+    for en_k, et_v in _WEATHER_DESC_SORTED:
         if en_k in raw:
             return et_v.capitalize()
     return desc.title()

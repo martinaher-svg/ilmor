@@ -30,7 +30,19 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from engine import ForecastStep, WeatherPayload, deg_to_cardinal, evaluate_vibe, fetch_weather, nearest_step
+from engine import (
+    ForecastStep,
+    StepCondition,
+    VibeRule,
+    WeatherPayload,
+    classify_step,
+    deg_to_cardinal,
+    evaluate_vibe,
+    fetch_weather,
+    is_notable_gust,
+    is_wind_elevated,
+    nearest_step,
+)
 
 REGIONS: List[Tuple[str, str]] = [("BE", "🇧🇪"), ("IT", "🇮🇹"), ("EE", "🇪🇪")]
 RETRY_DELAYS = (0, 5, 15)  # seconds before each attempt
@@ -56,8 +68,69 @@ LIGHTING_ET = {
     "Darkness": "Pimedus",
 }
 
+FACTOR_LABELS_EN: Dict[str, str] = {
+    "thunder": "Thunder",
+    "freezing": "Freezing",
+    "snow": "Snow",
+    "sleet": "Sleet",
+    "rain": "Rain",
+    "wind": "Wind",
+    "fog": "Fog",
+    "mist": "Mist",
+    "cold": "Cold",
+    "heat": "Heat",
+    "humidity": "Humid",
+    "dry": "Dry air",
+    "uv": "High UV",
+    "sun": "Sun",
+    "clouds": "Clouds",
+    "night": "Night",
+    "morning": "Morning",
+    "air": "Poor air",
+    "front": "Front",
+}
+
+# StepCondition.kind -> (tag_cls, flag_cls, wind_col_cls)
+STEP_STYLES: Dict[str, Tuple[str, str, str]] = {
+    "thunder_squall": ("storm", "warn", "storm"),
+    "thunderstorm": ("storm", "warn", "storm"),
+    "ice_storm": ("ice", "ice", "ice"),
+    "freezing_rain": ("ice", "ice", "ice"),
+    "blizzard": ("frost", "warn", "frost"),
+    "wintry_gale": ("mix", "warn", "mix"),
+    "wet_gale": ("storm", "warn", "storm"),
+    "arctic_gale": ("frost", "warn", "frost"),
+    "gale": ("warn", "warn", "windy"),
+    "freezing_fog": ("ice", "ice", "ice"),
+    "mixed_precip": ("mix", "mix", "mix"),
+    "stormy_rain": ("storm", "storm", "storm"),
+    "cold_lashing_rain": ("storm", "storm", "storm"),
+    "foggy_rain": ("fog", "fog", "fog"),
+    "windy_fog": ("fog", "fog", "fog"),
+    "heavy_snow": ("frost", "frost", "frost"),
+    "heavy_rain": ("storm", "warn", "storm"),
+    "cold_rain": ("wet", "wet", "wet"),
+    "misty_drizzle": ("fog", "fog", "fog"),
+    "snow": ("frost", "frost", "frost"),
+    "rain": ("wet", "wet", "wet"),
+    "dense_fog": ("fog", "fog", "fog"),
+    "bitter_wind": ("frost", "frost", "frost"),
+    "bitter_cold": ("frost", "frost", "frost"),
+    "hot_dry_wind": ("heat", "heat", "heat"),
+    "muggy_heat": ("heat", "heat", "heat"),
+    "extreme_heat": ("heat", "heat", "heat"),
+    "windy": ("windy", "windy", "windy"),
+    "calm": ("", "", "windy"),
+}
+
 from vibe_be import get_be_vibe
-from vibe_ee import get_ee_vibe, translate_weather_desc
+from vibe_ee import (
+    get_ee_vibe,
+    translate_factor_et,
+    translate_step_kind_et,
+    translate_synergy_et,
+    translate_weather_desc,
+)
 
 
 @dataclass
@@ -139,26 +212,45 @@ nav{display:flex;gap:6px}
 nav a{color:var(--dim);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-weight:700}
 nav a.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.vibe{border-left:3px solid var(--c)}
+.vibe.sev-advisory{background:var(--panel);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 8%,var(--panel)),var(--panel) 55%)}
+.vibe.sev-warning{border-left-width:4px;background:var(--panel);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 13%,var(--panel)),var(--panel) 60%)}
+.vibe.sev-severe{border-left-width:4px;border-color:color-mix(in srgb,var(--c) 45%,var(--line));border-left-color:var(--c);background:var(--panel);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 18%,var(--panel)),var(--panel) 65%)}
 .vibe h1{margin:0 0 6px;font-size:22px;letter-spacing:.03em;color:var(--c)}
 .vibe p{margin:0;font-style:italic;color:var(--c);opacity:.92}
+.synergy{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:12px}
+.syn-label{color:var(--c);font-weight:700;letter-spacing:.03em}
+.syn-sep{color:var(--dim)}
+.syn-factors{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
+.chip{display:inline-block;padding:1px 6px;border-radius:999px;border:1px solid var(--line);border-color:color-mix(in srgb,var(--c) 45%,var(--line));background:#0f141c;background:color-mix(in srgb,var(--c) 12%,#0f141c);color:var(--txt);font-size:11px;line-height:1.35}
+.syn-plus{color:var(--dim);font-size:11px}
 .now{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .now .big{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.now .big b{font-size:40px;color:#67e8f9;line-height:1}
+.now .big b{font-size:40px;color:var(--tc,#67e8f9);line-height:1}
+.badges{display:inline-flex;flex-wrap:wrap;gap:5px;vertical-align:middle}
 .tile{background:#0f141c;border:1px solid var(--line);border-radius:8px;padding:8px}
+.tile.hit{border-left:2px solid var(--c);background:#0f141c;background:color-mix(in srgb,var(--c) 7%,#0f141c)}
+.tile.hit small{color:var(--c)}
+.tile.hit .val{color:var(--c);font-weight:700}
 .tile small{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
 h2{font-size:12px;letter-spacing:.1em;color:var(--dim);margin:0 0 8px;text-transform:uppercase}
 .row{display:grid;grid-template-columns:3.2em 4.0em 1fr 6.0em;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
 .row.tw{grid-template-columns:3.2em 4.0em 1fr 2.6em}
 .row .wcol{text-align:right;font-size:13px;white-space:nowrap}
-.row .d{grid-column:1/-1;color:var(--dim);font-size:12px;margin-top:-4px}
+.row .d{grid-column:1/-1;color:var(--dim);font-size:12px;margin-top:-4px;line-height:1.45}
+.step-tag{font-weight:700}
 .bar{position:relative;height:18px;border-radius:4px;background:#1b2330;overflow:hidden;font-size:12px}
 .bar i{position:absolute;inset:0 auto 0 0;background:#2f5fb8}
+.bar.storm i{background:linear-gradient(90deg,#7c3aed,#dc2626)}
+.bar.mix i{background:linear-gradient(90deg,#2f5fb8,#0e7490)}
 .bar.ice i{background:#9a3412}
 .bar.snow i{background:#0e7490}
 .bar span{position:relative;padding:0 6px;line-height:18px;white-space:nowrap}
 .wet{color:#79a6ff}.warn{color:#ff6b6b;font-weight:700}.windy{color:#ff6b6b}
+.storm{color:#c084fc;font-weight:700}.mix{color:#7dd3fc;font-weight:700}
 .ice{color:#f59e0b;font-weight:700}.fog{color:#d7d787}.frost{color:#67e8f9}
+.heat{color:#fb923c;font-weight:700}.sev{letter-spacing:.02em}
 .badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid currentColor;letter-spacing:.04em}
 .day-sep{margin:8px 0 2px;padding-top:6px;border-top:1px dashed var(--line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
 .day-sep+.row{border-top:0}
@@ -167,12 +259,19 @@ h2{font-size:12px;letter-spacing:.1em;color:var(--dim);margin:0 0 8px;text-trans
 footer{color:var(--dim);font-size:12px;text-align:center;padding:8px 0 20px}
 .stale footer time{color:#ff6b6b;font-weight:700}
 .err{color:#ff6b6b}
+.ov{border-left:3px solid var(--c,var(--line))}
+.ov.sev-warning{border-left-width:4px;background:var(--panel);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 10%,var(--panel)),var(--panel) 55%)}
+.ov.sev-severe{border-left-width:4px;background:var(--panel);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 15%,var(--panel)),var(--panel) 60%)}
 .ov a{display:block;text-decoration:none;color:inherit}
 .ov .top{display:flex;justify-content:space-between;align-items:baseline}
 .ov .reg{font-weight:700;font-size:18px}
-.ov .t{font-size:26px;color:#67e8f9}
+.ov .t{font-size:26px;color:var(--tc,#67e8f9)}
 .ov .t small{font-size:14px;color:var(--dim);margin-left:4px}
-.ov h1{font-size:17px;margin:6px 0 2px}
+.ov-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 8px;margin:6px 0 3px}
+.ov h1{font-size:17px;margin:0;color:var(--c)}
+.syn-pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--c);border-color:color-mix(in srgb,var(--c) 55%,var(--line));background:#0f141c;background:color-mix(in srgb,var(--c) 12%,#0f141c);color:var(--c);letter-spacing:.03em;white-space:nowrap}
+.ov-meta{color:var(--dim);font-size:13px}
+@media (max-width:380px){.now{grid-template-columns:repeat(2,1fr)}}
 """
 
 JS = """
@@ -283,57 +382,207 @@ def _vis_label(meters: int, is_ee: bool) -> str:
     return base
 
 
+def _temp_color(temp: float) -> str:
+    """Thermal-aware accent tint so heat vibes and temperatures stay visually cohesive."""
+    if temp <= 0.5:
+        return "#67e8f9"
+    if temp < 10.0:
+        return "#93c5fd"
+    if temp < 19.0:
+        return "#e6edf3"
+    if temp <= 25.0:
+        return "#f9e27d"
+    if temp <= 31.0:
+        return "#f59e0b"
+    return "#ff6b6b"
+
+
+def _resolve_vibe(v: VibeRule, region: str) -> Tuple[str, str]:
+    if region == "EE":
+        name, quote = get_ee_vibe(v.name, default_quote=v.quote)
+    elif region == "BE":
+        name, quote = get_be_vibe(v.name, default_quote=v.quote)
+    else:
+        name, quote = v.name, v.quote
+    return name, quote or v.quote
+
+
+def _factor_label(factor: str, is_ee: bool) -> str:
+    if is_ee:
+        return translate_factor_et(factor)
+    return FACTOR_LABELS_EN.get(factor, factor.replace("_", " ").title())
+
+
+def _synergy_label(v: VibeRule, is_ee: bool) -> str:
+    if not v.synergy_key:
+        return ""
+    if is_ee:
+        return translate_synergy_et(v.synergy_key, v.synergy_label)
+    return v.synergy_label
+
+
+def _step_kind_label(sc: StepCondition, is_ee: bool) -> str:
+    if is_ee:
+        return translate_step_kind_et(sc.kind, sc.label)
+    return sc.label
+
+
+def _safe_severity(severity: str) -> str:
+    return severity if severity in ("calm", "advisory", "warning", "severe") else "calm"
+
+
+def _render_synergy_strip(v: VibeRule, is_ee: bool) -> str:
+    """Render emergent compound label and contributing factor chips for the hero card."""
+    if not (v.is_compound or v.severity in ("warning", "severe")):
+        return ""
+    syn_label = _synergy_label(v, is_ee)
+    chips = [f'<span class="chip">{E(_factor_label(f, is_ee))}</span>' for f in v.factors]
+    if not syn_label and not chips:
+        return ""
+    parts: List[str] = []
+    if syn_label:
+        parts.append(f'<span class="syn-label">{E(syn_label)}</span>')
+    if chips:
+        if parts:
+            parts.append('<span class="syn-sep">·</span>')
+        joined = '<span class="syn-plus">+</span>'.join(chips)
+        parts.append(f'<span class="syn-factors">{joined}</span>')
+    return f'<div class="synergy">{"".join(parts)}</div>'
+
+
+def _render_now_badges(v: VibeRule, w: WeatherPayload, is_ee: bool) -> str:
+    """Render high-severity hazard badges (freezing precip, severe compound/extreme, poor AQI)."""
+    badges: List[str] = []
+    if w.is_freezing_wet:
+        badges.append(f'<span class="badge ice">{"JÄÄTUV SADU" if is_ee else "FREEZING PRECIP"}</span>')
+    elif v.severity == "severe":
+        syn_label = _synergy_label(v, is_ee)
+        if syn_label:
+            fset = set(v.factors)
+            if "freezing" in fset:
+                b_cls = "ice"
+            elif fset & {"snow", "sleet"}:
+                b_cls = "frost"
+            elif "heat" in fset:
+                b_cls = "heat"
+            else:
+                b_cls = "warn"
+            badges.append(f'<span class="badge {b_cls}">{E(syn_label.upper())}</span>')
+    if w.aqi_data is not None and w.aqi_data.aqi >= 4:
+        if w.aqi_data.aqi >= 5:
+            badges.append(f'<span class="badge warn">{"OHTLIK ÕHK" if is_ee else "HAZARDOUS AIR"}</span>')
+        else:
+            badges.append(f'<span class="badge ice">{"HALB ÕHK" if is_ee else "POOR AIR"}</span>')
+    if not badges:
+        return ""
+    return f' <span class="badges">{" ".join(badges)}</span>'
+
+
 def _format_step_precip(s: ForecastStep) -> str:
     if s.rain_mm > 0 and s.snow_mm > 0:
-        return f"❄{s.total_precip_mm:.1f}mm"
+        return f"{s.rain_mm:.1f}+❄{s.snow_mm:.1f}mm"
     if s.snow_mm > 0:
         return f"❄{s.snow_mm:.1f}mm"
     return f"{s.rain_mm:.1f}mm"
 
 
-def _step_context(s: ForecastStep, is_ee: bool) -> Tuple[str, str, str, str]:
-    """Return (tw_flag_html, precip_cls, bar_cls, extra_notes_html) for a forecast step."""
-    is_stormy = s.wind_speed >= 10.0 or s.effective_wind_gust >= 13.0
-    is_freezing = s.is_freezing_wet
-    is_snowy = s.snow_mm >= 0.3 or "snow" in s.desc_lower or "sleet" in s.desc_lower
-    is_foggy = s.is_dense_fog
-    is_bitter_cold = s.temp <= -5.0 or (s.feels_like is not None and s.feels_like <= -8.0)
-    is_wet_risk = s.total_precip_mm > 0.4 or s.pop > 0.5
+def _step_context(
+    s: ForecastStep,
+    is_ee: bool,
+    include_wind: bool = False,
+) -> Tuple[str, str, str, str]:
+    """Return (tw_flag_html, precip_cls, bar_cls, detail_html) for a forecast step."""
+    sc = classify_step(s)
+    tag_cls, flag_cls, _ = STEP_STYLES.get(sc.kind, ("", "", "windy"))
 
-    if is_freezing:
-        flag = '<span class="ice">[!]</span>'
-    elif is_wet_risk or is_stormy or is_snowy:
-        flag = '<span class="warn">[!]</span>'
-    elif is_foggy:
-        flag = '<span class="fog">[!]</span>'
-    elif is_bitter_cold:
-        flag = '<span class="frost">[!]</span>'
+    if sc.severity == "severe":
+        flag = f'<span class="{flag_cls or "warn"} sev">[!]</span>'
+    elif sc.severity == "warning":
+        flag = f'<span class="{flag_cls or "warn"}">[!]</span>'
+    elif sc.severity == "advisory":
+        flag = f'<span class="{flag_cls or "wet"}">[~]</span>'
     else:
         flag = "[-]"
 
-    bar_cls = "bar ice" if is_freezing else ("bar snow" if (s.snow_mm > 0 or is_snowy) else "bar")
-    precip_cls = "ice" if is_freezing else ("frost" if s.snow_mm > 0 else ("wet" if s.rain_mm > 0 else ""))
+    is_ice = sc.kind in ("ice_storm", "freezing_rain") or s.is_freezing_wet
+    is_mixed = (s.rain_mm > 0 and s.snow_mm > 0) or sc.kind in ("wintry_gale", "mixed_precip")
+    is_storm_bar = sc.kind in (
+        "thunder_squall", "thunderstorm", "wet_gale",
+        "stormy_rain", "cold_lashing_rain", "heavy_rain",
+    )
+    is_snow_bar = sc.kind in ("blizzard", "heavy_snow", "snow") or s.snow_mm > 0
 
-    extras: List[str] = []
-    if is_freezing:
-        extras.append(f'<span class="ice">{"Libeduse oht" if is_ee else "Ice risk"}</span>')
-    if is_foggy and "fog" not in s.desc_lower:
-        extras.append(f'<span class="fog">{"Tihe udu" if is_ee else "Dense fog"}</span>')
-    if is_bitter_cold:
-        extras.append(f'<span class="frost">{"Karm külm" if is_ee else "Bitter cold"}</span>')
-    if s.rain_mm > 0 and s.snow_mm > 0:
-        extras.append(
-            f'{"vihm" if is_ee else "rain"} {s.rain_mm:.1f} + {"lumi" if is_ee else "snow"} {s.snow_mm:.1f}mm'
+    if is_ice:
+        bar_cls = "bar ice"
+        precip_cls = "ice"
+    elif is_mixed:
+        bar_cls = "bar mix"
+        precip_cls = "mix"
+    elif is_storm_bar:
+        bar_cls = "bar storm"
+        precip_cls = "storm"
+    elif is_snow_bar:
+        bar_cls = "bar snow"
+        precip_cls = "frost"
+    else:
+        bar_cls = "bar"
+        precip_cls = "wet" if (s.rain_mm > 0 or "rain" in sc.factors) else ""
+
+    s_desc = _format_descs(s.effective_descs, s.desc, is_ee)
+    sc_label = _step_kind_label(sc, is_ee)
+    show_tag = (
+        sc.kind != "calm"
+        and (
+            sc.is_compound
+            or sc.severity in ("warning", "severe")
+            or sc_label.lower() not in s_desc.lower()
         )
+    )
 
+    parts: List[str] = []
+    if show_tag:
+        cls_attr = f" {tag_cls}" if tag_cls else ""
+        parts.append(f'<span class="step-tag{cls_attr}">{E(sc_label)}</span>')
+        if s_desc and s_desc.lower() not in sc_label.lower():
+            parts.append(E(s_desc))
+    elif s_desc:
+        parts.append(E(s_desc))
+
+    if (
+        s.is_dense_fog
+        and "fog" not in sc.factors
+        and "fog" not in s.desc_lower
+        and sc.kind not in ("blizzard", "wintry_gale", "heavy_snow", "heavy_rain", "wet_gale", "thunder_squall")
+    ):
+        parts.append(f'<span class="fog">{"Tihe udu" if is_ee else "Dense fog"}</span>')
     if s.visibility is not None and s.visibility < 4000:
-        extras.append(f'{"näht." if is_ee else "vis"} {_format_vis(s.visibility)}')
+        parts.append(f'{"näht." if is_ee else "vis"} {_format_vis(s.visibility)}')
     if s.feels_like is not None and abs(s.feels_like - s.temp) >= 2.5:
-        extras.append(f'{"tuntav" if is_ee else "feels"} {s.feels_like:+.0f}°')
-    if s.effective_wind_gust >= s.wind_speed + 2.0 and s.effective_wind_gust >= 10.0:
-        extras.append(f'{"iilid" if is_ee else "gusts"} {s.effective_wind_gust:.0f} m/s')
+        parts.append(f'{"tuntav" if is_ee else "feels"} {s.feels_like:+.0f}°')
 
-    return flag, precip_cls, bar_cls, " · ".join(extras)
+    gust = s.effective_wind_gust
+    notable_gust = is_notable_gust(s.wind_speed, gust)
+    if include_wind and (
+        "wind" in sc.factors or is_wind_elevated(s.wind_speed, gust) or notable_gust
+    ):
+        w_card = deg_to_cardinal(s.wind_deg)
+        if notable_gust:
+            w_txt = (
+                f"tuul {w_card} {s.wind_speed:.1f} m/s (iilid {gust:.0f})"
+                if is_ee
+                else f"wind {w_card} {s.wind_speed:.1f} m/s (gusts {gust:.0f})"
+            )
+        else:
+            w_txt = (
+                f"tuul {w_card} {s.wind_speed:.1f} m/s"
+                if is_ee
+                else f"wind {w_card} {s.wind_speed:.1f} m/s"
+            )
+        parts.append(w_txt)
+    elif notable_gust:
+        parts.append(f'{"iilid" if is_ee else "gusts"} {gust:.0f} m/s')
+
+    return flag, precip_cls, bar_cls, " · ".join(parts)
 
 
 def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str], generated: int) -> str:
@@ -347,14 +596,12 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
         return page(f"{loc.region} · {'pole saadaval' if is_ee else 'unavailable'}", body, generated, lang=lang)
 
     v = evaluate_vibe(w)
-    if is_ee:
-        v_name, v_quote = get_ee_vibe(v.name)
-    elif loc.region == "BE":
-        v_name, v_quote = get_be_vibe(v.name)
-    else:
-        v_name, v_quote = v.name, v.quote
-
+    v_name, v_quote = _resolve_vibe(v, loc.region)
+    sev = _safe_severity(v.severity)
     color = COLORS.get(v.color, "#f0f6fc")
+    temp_color = _temp_color(w.temp)
+    factors = set(v.factors)
+
     uv = f"~{w.uv_index:.1f}" if w.uv_estimated else f"{w.uv_index:.1f}"
     if w.snow_amount > 0 and w.rain_amount > 0:
         precip = f"{w.rain_amount:.1f} mm · ❄ {w.snow_amount:.1f} mm"
@@ -370,27 +617,42 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     dew_label = "Kastep." if is_ee else "Dew"
     uv_label = "UV"
     rain_now_label = "Sadu praegu" if is_ee else "Precip now"
-    rain_chance_label = "Saju tõenäosus" if is_ee else "Rain chance"
+    rain_chance_label = "Saju tõenäosus" if is_ee else "Precip chance"
     press_label = "Õhurõhk" if is_ee else "Pressure"
 
     gust_val = w.effective_wind_gust
-    if gust_val >= w.wind_speed + 1.5:
+    has_gust = is_notable_gust(w.wind_speed, gust_val)
+    elev_wind = is_wind_elevated(w.wind_speed, gust_val)
+    wind_hit = ("wind" in factors) or elev_wind
+    hum_hit = bool(factors & {"humidity", "dry", "fog", "mist"})
+    uv_hit = bool(factors & {"uv", "sun"})
+    precip_hit = bool(factors & {"rain", "snow", "sleet", "freezing", "thunder"})
+    prob_hit = "front" in factors
+    press_hit = bool(factors & {"front", "air"})
+
+    if wind_hit:
+        wind_val_cls = ' class="val"'
+    elif elev_wind:
+        wind_val_cls = ' class="windy"'
+    else:
+        wind_val_cls = ""
+
+    if has_gust:
         gust_lbl = f"iilid {gust_val:.0f} m/s" if is_ee else f"gusts {gust_val:.0f} m/s"
-        gust_cls = ' class="windy"' if gust_val >= 13.0 else ""
-        wind_sub = f'{deg_to_cardinal(w.wind_deg)} · <span{gust_cls}>{gust_lbl}</span>'
+        wind_sub = f'{deg_to_cardinal(w.wind_deg)} · <span{wind_val_cls}>{gust_lbl}</span>'
     else:
         wind_sub = f'{deg_to_cardinal(w.wind_deg)} · {w.wind_deg}°'
-    wind_val_cls = ' class="windy"' if (w.wind_speed >= 10.0 or gust_val >= 13.0) else ""
 
     vis_inline = (f' · {"näht." if is_ee else "vis"} {_format_vis(w.visibility)}'
                   if (w.visibility is not None and w.visibility < 4000) else "")
-    freeze_badge = (f' <span class="badge ice">{"JÄÄTUV SADU" if is_ee else "FREEZING PRECIP"}</span>'
-                    if w.is_freezing_wet else "")
+    badges_html = _render_now_badges(v, w, is_ee)
 
     if w.is_freezing_wet:
         precip_sub = f'<br><span class="ice">⚠ {"Jäätuv / libe" if is_ee else "Freezing / glaze"}</span>'
     elif w.rain_amount == 0.0 and w.snow_amount == 0.0 and w.is_wet:
         precip_sub = f'<br><span style="color:var(--dim)">{"Nõrk tibutus" if is_ee else "Trace drizzle"}</span>'
+    elif w.rain_amount == 0.0 and w.snow_amount == 0.0 and ("snow" in w.all_descs_lower or "sleet" in w.all_descs_lower):
+        precip_sub = f'<br><span style="color:var(--dim)">{"Nõrk lumesadu" if is_ee else "Trace snow"}</span>'
     else:
         precip_sub = ""
 
@@ -398,16 +660,28 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     if w.forecast_steps and w.forecast_steps[0].total_precip_mm > 0:
         next_precip_sub = f'<br><span style="color:var(--dim)">3h: {E(_format_step_precip(w.forecast_steps[0]))}</span>'
 
+    if w.pressure <= 1000:
+        press_sub = f'<br><span style="color:var(--dim)">{"Madalrõhk" if is_ee else "Low"}</span>'
+    elif w.pressure >= 1028:
+        press_sub = f'<br><span style="color:var(--dim)">{"Kõrgrõhk" if is_ee else "High"}</span>'
+    else:
+        press_sub = ""
+
+    synergy_strip = _render_synergy_strip(v, is_ee)
+
     parts = [head]
-    parts.append(f'<section class="card vibe" style="--c:{color}"><h1>{E(v_name)}</h1><p>{E(v_quote)}</p></section>')
-    parts.append(f'''<section class="card now">
-<div class="big"><b>{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}{vis_inline}{freeze_badge}</span></div>
-<div class="tile"><small>{wind_label}</small><span{wind_val_cls}>{w.wind_speed:.1f} m/s</span><br><span style="color:var(--dim)">{wind_sub}</span></div>
-<div class="tile"><small>{hum_label}</small>{w.humidity}%<br><span style="color:var(--dim)">{dew_label} {w.dew_point:+.1f}°C</span></div>
-<div class="tile"><small>{uv_label}</small>{uv}</div>
-<div class="tile"><small>{rain_now_label}</small>{precip}{precip_sub}</div>
-<div class="tile"><small>{rain_chance_label}</small>{w.rain_prob:.0f}%{next_precip_sub}</div>
-<div class="tile"><small>{press_label}</small>{w.pressure} hPa</div>
+    parts.append(
+        f'<section class="card vibe sev-{sev}" style="--c:{color}">'
+        f'<h1>{E(v_name)}</h1><p>{E(v_quote)}</p>{synergy_strip}</section>'
+    )
+    parts.append(f'''<section class="card now" style="--c:{color}">
+<div class="big"><b style="--tc:{temp_color}">{w.temp:+.1f}°C</b><span>{feels_label} {w.feels_like:+.1f}°C · {E(desc_disp)}{vis_inline}{badges_html}</span></div>
+<div class="tile{" hit" if wind_hit else ""}"><small>{wind_label}</small><span{wind_val_cls}>{w.wind_speed:.1f} m/s</span><br><span style="color:var(--dim)">{wind_sub}</span></div>
+<div class="tile{" hit" if hum_hit else ""}"><small>{hum_label}</small><span{' class="val"' if hum_hit else ""}>{w.humidity}%</span><br><span style="color:var(--dim)">{dew_label} {w.dew_point:+.1f}°C</span></div>
+<div class="tile{" hit" if uv_hit else ""}"><small>{uv_label}</small><span{' class="val"' if uv_hit else ""}>{uv}</span></div>
+<div class="tile{" hit" if precip_hit else ""}"><small>{rain_now_label}</small><span{' class="val"' if precip_hit else ""}>{precip}</span>{precip_sub}</div>
+<div class="tile{" hit" if prob_hit else ""}"><small>{rain_chance_label}</small><span{' class="val"' if prob_hit else ""}>{w.rain_prob:.0f}%</span>{next_precip_sub}</div>
+<div class="tile{" hit" if press_hit else ""}"><small>{press_label}</small><span{' class="val"' if press_hit else ""}>{w.pressure} hPa</span>{press_sub}</div>
 </section>''')
 
     tw_matches = []
@@ -423,14 +697,11 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
     for s, label in tw_matches:
         day_prefix = ("Homme · " if is_ee else "Tomorrow · ") if s.day_offset > 0 else ""
         tw_label = f"{day_prefix}{label}"
-        flag, precip_cls, _, extras = _step_context(s, is_ee)
-        s_desc = _format_descs(s.effective_descs, s.desc, is_ee)
-        detail_parts = [f"{tw_label} · {E(s_desc)}"]
-        if extras:
-            detail_parts.append(extras)
-        rows.append(f'<div class="row tw"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
+        flag, precip_cls, _, detail = _step_context(s, is_ee, include_wind=True)
+        tw_detail = f"{tw_label} · {detail}" if detail else tw_label
+        rows.append(f'<div class="row tw"><b>{E(s.time_str)}</b><span>{s.temp:+.1f}°</span>'
                     f'<span class="{precip_cls}">{int(s.pop*100)}% · {_format_step_precip(s)}</span>'
-                    f'<span>{flag}</span><span class="d">{" · ".join(detail_parts)}</span></div>')
+                    f'<span>{flag}</span><span class="d">{tw_detail}</span></div>')
     if rows:
         tw_title = "Võtmeajad" if is_ee else "Target windows"
         parts.append(f'<section class="card"><h2>{tw_title}</h2>{"".join(rows)}</section>')
@@ -442,13 +713,14 @@ def render_detail(loc: Location, w: Optional[WeatherPayload], err: Optional[str]
             frows.append(f'<h3 class="day-sep">{"Homme" if is_ee else "Tomorrow"}</h3>')
             prev_day = s.day_offset
         pct = int(s.pop * 100)
-        s_desc = _format_descs(s.effective_descs, s.desc, is_ee)
-        _, _, bar_cls, extras = _step_context(s, is_ee)
-        is_windy_row = s.wind_speed >= 10.0 or s.effective_wind_gust >= 13.0
-        detail = E(s_desc) + (f" · {extras}" if extras else "")
-        frows.append(f'<div class="row"><b>{s.time_str}</b><span>{s.temp:+.1f}°</span>'
+        sc = classify_step(s)
+        _, _, bar_cls, detail = _step_context(s, is_ee, include_wind=False)
+        _, _, wind_col_cls = STEP_STYLES.get(sc.kind, ("", "", "windy"))
+        is_windy_row = is_wind_elevated(s.wind_speed, s.effective_wind_gust)
+        wcol_cls = f" {wind_col_cls}" if is_windy_row else ""
+        frows.append(f'<div class="row"><b>{E(s.time_str)}</b><span>{s.temp:+.1f}°</span>'
                      f'<div class="{bar_cls}"><i style="width:{pct}%"></i><span>{pct}% · {_format_step_precip(s)}</span></div>'
-                     f'<span class="wcol{" windy" if is_windy_row else ""}">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
+                     f'<span class="wcol{wcol_cls}">{deg_to_cardinal(s.wind_deg)} {s.wind_speed:.1f}m/s</span>'
                      f'<span class="d">{detail}</span></div>')
     fc_title = "24 h prognoos" if is_ee else "24-hour forecast"
     parts.append(f'<section class="card"><h2>{fc_title}</h2>{"".join(frows)}</section>')
@@ -506,16 +778,18 @@ def render_overview(results, generated: int) -> str:
                          f'<p class="err">{err_text}</p></a></section>')
             continue
         v = evaluate_vibe(w)
+        v_name, _ = _resolve_vibe(v, loc.region)
+        sev = _safe_severity(v.severity)
+        color = COLORS.get(v.color, "#f0f6fc")
+        temp_color = _temp_color(w.temp)
         gust_val = w.effective_wind_gust
-        has_gust = gust_val >= w.wind_speed + 2.0 and gust_val >= 11.0
+        has_gust = is_notable_gust(w.wind_speed, gust_val)
         gust_kw = "iilid" if is_ee else "gusts"
         wind_str = f"{w.wind_speed:.0f} ({gust_kw} {gust_val:.0f}) m/s" if has_gust else f"{w.wind_speed:.0f} m/s"
-        if is_ee:
-            v_name, _ = get_ee_vibe(v.name)
-        elif loc.region == "BE":
-            v_name, _ = get_be_vibe(v.name)
-        else:
-            v_name = v.name
+
+        syn_label = _synergy_label(v, is_ee)
+        show_pill = bool(syn_label) and (v.is_compound or sev in ("warning", "severe"))
+        ov_pill = f'<span class="syn-pill">{E(syn_label)}</span>' if show_pill else ""
 
         desc_disp = _format_descs(w.effective_descs, w.desc, is_ee)
         if w.snow_amount > 0 and w.rain_amount > 0:
@@ -524,6 +798,13 @@ def render_overview(results, generated: int) -> str:
             precip_str = f"{w.rain_prob:.0f}% {'lumi' if is_ee else 'snow'} (❄{w.snow_amount:.1f} mm)"
         elif w.rain_amount > 0:
             precip_str = f"{w.rain_prob:.0f}% {'sadu' if is_ee else 'rain'} ({w.rain_amount:.1f} mm)"
+        elif (
+            w.temp <= 0.5
+            or "snow" in w.all_descs_lower
+            or "sleet" in w.all_descs_lower
+            or (w.forecast_steps and w.forecast_steps[0].snow_mm > 0)
+        ):
+            precip_str = f"{w.rain_prob:.0f}% {'sadu' if is_ee else 'precip'}"
         else:
             precip_str = f"{w.rain_prob:.0f}% {'vihma' if is_ee else 'rain'}"
 
@@ -532,16 +813,21 @@ def render_overview(results, generated: int) -> str:
             ov_parts.append(f"{'näht.' if is_ee else 'vis'} {_format_vis(w.visibility)}")
         if w.is_freezing_wet:
             ov_parts.append(f'<span class="ice">{"Jäätuv sadu" if is_ee else "Freezing precip"}</span>')
+        if w.aqi_data is not None and w.aqi_data.aqi >= 4:
+            if w.aqi_data.aqi >= 5:
+                ov_parts.append(f'<span class="warn">{"Ohtlik õhk" if is_ee else "Hazardous air"}</span>')
+            else:
+                ov_parts.append(f'<span class="ice">{"Halb õhk" if is_ee else "Poor air"}</span>')
         desc_text = " · ".join(ov_parts)
 
         feels_small = ""
         if abs(w.feels_like - w.temp) >= 2.5:
             feels_small = f'<small>({"tuntav" if is_ee else "feels"} {w.feels_like:+.0f}°)</small>'
 
-        cards.append(f'''<section class="card ov"><a href="./{loc.region.lower()}/">
-<div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t">{w.temp:+.0f}°{feels_small}</span></div>
-<h1 style="color:{COLORS.get(v.color, "#f0f6fc")}">{E(v_name)}</h1>
-<span style="color:var(--dim)">{desc_text}</span></a></section>''')
+        cards.append(f'''<section class="card ov sev-{sev}" style="--c:{color}"><a href="./{loc.region.lower()}/">
+<div class="top"><span class="reg">{loc.flag} {loc.region}</span><span class="t" style="--tc:{temp_color}">{w.temp:+.0f}°{feels_small}</span></div>
+<div class="ov-head"><h1>{E(v_name)}</h1>{ov_pill}</div>
+<span class="ov-meta">{desc_text}</span></a></section>''')
     return page("Atmospheric Dispatch", "\n".join(cards), generated, app_title="Atmospheric")
 
 
